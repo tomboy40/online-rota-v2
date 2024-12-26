@@ -56,3 +56,10 @@ pnpm-debug.log*
 # Misc
 .DS_Store
 Thumbs.db
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal
+
+# Environment variables
+.env
