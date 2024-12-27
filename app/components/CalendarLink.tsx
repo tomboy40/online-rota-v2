@@ -20,6 +20,7 @@ export default function CalendarLink({ calendar }: CalendarLinkProps) {
   return (
     <Link
       to={`/calendar/${getCurrentView()}?calendarId=${calendar.id}`}
+      state={{ calendarName: calendar.name }}
       prefetch="none"
       className="flex items-center space-x-3 px-6 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded-lg"
     >

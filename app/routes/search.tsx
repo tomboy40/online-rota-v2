@@ -52,11 +52,13 @@ export default function Search() {
     return clientUtils.getLastCalendarView();
   };
 
-  const handleCalendarClick = (calendarId: string, e: React.MouseEvent) => {
+  const handleCalendarClick = (calendar: Calendar, e: React.MouseEvent) => {
     e.preventDefault();
     setIsNavigating(true);
     const view = getCurrentView();
-    navigate(`/calendar/${view}?calendarId=${calendarId}`);
+    navigate(`/calendar/${view}?calendarId=${calendar.id}`, {
+      state: { calendarName: calendar.name }
+    });
   };
 
   // Reset navigation state when navigation completes
@@ -105,7 +107,8 @@ export default function Search() {
               <div key={calendar.id} className="flex items-center py-3 px-4 hover:bg-gray-50">
                 <Link 
                   to={`/calendar/${getCurrentView()}?calendarId=${calendar.id}`}
-                  onClick={(e) => handleCalendarClick(calendar.id, e)}
+                  onClick={(e) => handleCalendarClick(calendar, e)}
+                  state={{ calendarName: calendar.name }}
                   className="flex-1 group"
                 >
                   <h3 className="text-lg font-medium text-gray-900 group-hover:text-blue-600">{calendar.name}</h3>

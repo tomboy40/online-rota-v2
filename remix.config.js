@@ -2,6 +2,10 @@
 module.exports = {
   ignoredRouteFiles: ["**/.*"],
   serverModuleFormat: "cjs",
+  serverDependenciesToBundle: [
+    "@heroicons/react",
+    "@headlessui/react"
+  ],
   future: {
     v3_fetcherPersist: true,
     v3_lazyRouteDiscovery: true,
