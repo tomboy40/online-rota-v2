@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Form } from "@remix-run/react";
+import { getFavorites, type Calendar } from "~/utils/favorites";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -10,13 +11,28 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ isOpen, onDateSelect, selectedDate, currentDate, onCreateClick }: SidebarProps) {
-  const [isMyCalendarsOpen, setIsMyCalendarsOpen] = useState(true);
+  const [isQuickAccessOpen, setIsQuickAccessOpen] = useState(true);
   const [miniCalendarDate, setMiniCalendarDate] = useState(selectedDate);
+  const [favorites, setFavorites] = useState<Calendar[]>([]);
 
   // Update mini calendar when main calendar changes
   useEffect(() => {
     setMiniCalendarDate(selectedDate);
   }, [selectedDate]);
+
+  // Load favorites
+  useEffect(() => {
+    const loadFavorites = () => {
+      const favList = getFavorites();
+      setFavorites(favList);
+    };
+
+    loadFavorites();
+    
+    // Listen for storage changes
+    window.addEventListener('storage', loadFavorites);
+    return () => window.removeEventListener('storage', loadFavorites);
+  }, []);
 
   // Generate dates for mini calendar
   const generateCalendarDates = () => {
@@ -150,34 +166,44 @@ export default function Sidebar({ isOpen, onDateSelect, selectedDate, currentDat
           </div>
         </div>
 
-        {/* My Calendars Section */}
+        {/* Quick Access Section */}
         <div>
           <button
-            onClick={() => setIsMyCalendarsOpen(!isMyCalendarsOpen)}
+            onClick={() => setIsQuickAccessOpen(!isQuickAccessOpen)}
             className="flex items-center space-x-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg px-2 py-1 w-full"
           >
             <svg
-              className={`h-4 w-4 transform transition-transform ${isMyCalendarsOpen ? 'rotate-90' : ''}`}
+              className={`h-4 w-4 transform transition-transform ${isQuickAccessOpen ? 'rotate-90' : ''}`}
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
-            <span>My calendars</span>
+            <span>Quick Access</span>
           </button>
           
-          {isMyCalendarsOpen && (
+          {isQuickAccessOpen && (
             <div className="mt-2 space-y-1">
-              {/* Sample calendars - replace with actual data */}
-              <label className="flex items-center space-x-3 px-6 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded-lg cursor-pointer">
-                <input type="checkbox" className="form-checkbox h-4 w-4 text-blue-600 rounded" />
-                <span>Calendar 1</span>
-              </label>
-              <label className="flex items-center space-x-3 px-6 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded-lg cursor-pointer">
-                <input type="checkbox" className="form-checkbox h-4 w-4 text-blue-600 rounded" />
-                <span>Calendar 2</span>
-              </label>
+              {favorites.length === 0 ? (
+                <p className="text-sm text-gray-500 px-6 py-1">No favorites yet</p>
+              ) : (
+                favorites.map((calendar) => (
+                  <div
+                    key={calendar.id}
+                    className="flex items-center space-x-3 px-6 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded-lg cursor-pointer"
+                  >
+                    <svg
+                      className="h-4 w-4 text-yellow-400 fill-current"
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+                    </svg>
+                    <span>{calendar.name}</span>
+                  </div>
+                ))
+              )}
             </div>
           )}
         </div>
