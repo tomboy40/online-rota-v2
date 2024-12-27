@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Form, useSubmit } from "@remix-run/react";
+import { Form } from "@remix-run/react";
 
 interface CreateCalendarDialogProps {
   isOpen: boolean;
@@ -10,14 +10,6 @@ export default function CreateCalendarDialog({ isOpen, onClose }: CreateCalendar
   const [appId, setAppId] = useState("");
   const [appName, setAppName] = useState("");
   const [icalLink, setIcalLink] = useState("");
-  const submit = useSubmit();
-
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    submit(formData, { method: "post", action: "/calendar/add" });
-    onClose();
-  };
 
   if (!isOpen) return null;
 
@@ -37,7 +29,7 @@ export default function CreateCalendarDialog({ isOpen, onClose }: CreateCalendar
           </button>
         </div>
 
-        <Form onSubmit={handleSubmit} method="post" className="p-4">
+        <Form method="post" action="/calendar/add" className="p-4" onSubmit={() => onClose()}>
           <div className="space-y-4">
             <div>
               <label htmlFor="appId" className="block text-sm font-medium text-gray-700">

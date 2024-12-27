@@ -8,7 +8,13 @@ interface HeaderProps {
   onTodayClick: () => void;
 }
 
-export default function Header({ currentDate, onMenuClick, onPrevClick, onNextClick, onTodayClick }: HeaderProps) {
+export default function Header({ 
+  currentDate, 
+  onMenuClick, 
+  onPrevClick, 
+  onNextClick, 
+  onTodayClick,
+}: HeaderProps) {
   const location = useLocation();
   
   // Determine current view from URL

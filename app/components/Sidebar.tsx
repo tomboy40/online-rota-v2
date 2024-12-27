@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Form, useSubmit } from "@remix-run/react";
+import { Form } from "@remix-run/react";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -10,10 +10,8 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ isOpen, onDateSelect, selectedDate, currentDate, onCreateClick }: SidebarProps) {
-  const [searchQuery, setSearchQuery] = useState("");
   const [isMyCalendarsOpen, setIsMyCalendarsOpen] = useState(true);
   const [miniCalendarDate, setMiniCalendarDate] = useState(selectedDate);
-  const submit = useSubmit();
 
   // Update mini calendar when main calendar changes
   useEffect(() => {
@@ -79,11 +77,6 @@ export default function Sidebar({ isOpen, onDateSelect, selectedDate, currentDat
 
   const formatMonthYear = () => {
     return miniCalendarDate.toLocaleString('default', { month: 'long', year: 'numeric' });
-  };
-
-  const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    submit(event.currentTarget);
   };
 
   if (!isOpen) return null;
@@ -156,25 +149,6 @@ export default function Sidebar({ isOpen, onDateSelect, selectedDate, currentDat
             ))}
           </div>
         </div>
-
-        {/* Search Input */}
-        <Form onSubmit={handleSearchSubmit} className="mb-8">
-          <div className="relative">
-            <input
-              type="text"
-              name="q"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search calendars"
-              className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-            />
-            <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-              <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-          </div>
-        </Form>
 
         {/* My Calendars Section */}
         <div>

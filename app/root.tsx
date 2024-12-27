@@ -1,5 +1,4 @@
 import { useState } from "react";
-import type { LinksFunction } from "@remix-run/node";
 import {
   Links,
   LiveReload,
@@ -8,18 +7,21 @@ import {
   Scripts,
   ScrollRestoration,
   useLocation,
+  useNavigate,
+  Link,
+  Form,
 } from "@remix-run/react";
-import styles from "./tailwind.css";
-import Header from "./components/Header";
-import Sidebar from "./components/Sidebar";
-import ViewSelector from "./components/ViewSelector";
-import CreateCalendarDialog from "./components/CreateCalendarDialog";
+import type { ViewOption } from "~/components/ViewSelector";
+import ViewSelector from "~/components/ViewSelector";
+import Header from "~/components/Header";
+import Sidebar from "~/components/Sidebar";
+import CreateCalendarDialog from "~/components/CreateCalendarDialog";
 
-export const links: LinksFunction = () => [
-  { rel: "stylesheet", href: styles },
-];
+import styles from "~/tailwind.css";
 
-type ViewOption = "Day" | "Week" | "Month";
+export function links() {
+  return [{ rel: "stylesheet", href: styles }];
+}
 
 export default function App() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -27,6 +29,7 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Determine current view from URL
   const getCurrentView = (): ViewOption => {
@@ -36,50 +39,26 @@ export default function App() {
     return "Week";
   };
 
-  // This function is called when a date is clicked in the mini calendar
   const handleDateSelect = (date: Date) => {
     const view = getCurrentView();
     const newMainDate = new Date(date);
     
-    // Adjust the main calendar date based on the current view
     switch (view) {
       case "Week":
-        // Set to the start of the week containing the selected date
         const dayOfWeek = date.getDay();
         newMainDate.setDate(date.getDate() - dayOfWeek);
         break;
       case "Month":
-        // Set to the first day of the month
         newMainDate.setDate(1);
         break;
-      // For day view, use the exact selected date
     }
     
     setCurrentDate(newMainDate);
-    setMiniCalendarDate(date); // Mini calendar shows the exact selected date
+    setMiniCalendarDate(date);
   };
 
   const handleMenuClick = () => {
     setIsSidebarOpen(!isSidebarOpen);
-  };
-
-  const handleTodayClick = () => {
-    const today = new Date();
-    const view = getCurrentView();
-    
-    // Set the main calendar date
-    const newMainDate = new Date(today);
-    switch (view) {
-      case "Week":
-        const dayOfWeek = today.getDay();
-        newMainDate.setDate(today.getDate() - dayOfWeek);
-        break;
-      case "Month":
-        newMainDate.setDate(1);
-        break;
-    }
-    setCurrentDate(newMainDate);
-    setMiniCalendarDate(today); // Mini calendar always shows today's exact date
   };
 
   const handlePrevClick = () => {
@@ -94,13 +73,11 @@ export default function App() {
         break;
       case "Week":
         newDate.setDate(newDate.getDate() - 7);
-        // Set mini calendar to the middle of the visible week
         newMiniDate = new Date(newDate);
         newMiniDate.setDate(newMiniDate.getDate() + 3);
         break;
       case "Month":
         newDate.setMonth(newDate.getMonth() - 1);
-        // Set mini calendar to the middle of the visible month
         newMiniDate = new Date(newDate);
         newMiniDate.setDate(15);
         break;
@@ -121,13 +98,11 @@ export default function App() {
         break;
       case "Week":
         newDate.setDate(newDate.getDate() + 7);
-        // Set mini calendar to the middle of the visible week
         newMiniDate = new Date(newDate);
         newMiniDate.setDate(newMiniDate.getDate() + 3);
         break;
       case "Month":
         newDate.setMonth(newDate.getMonth() + 1);
-        // Set mini calendar to the middle of the visible month
         newMiniDate = new Date(newDate);
         newMiniDate.setDate(15);
         break;
@@ -136,9 +111,28 @@ export default function App() {
     setMiniCalendarDate(newMiniDate);
   };
 
+  const handleTodayClick = () => {
+    const today = new Date();
+    setCurrentDate(today);
+    setMiniCalendarDate(today);
+  };
+
   const handleCreateClick = () => {
     setIsCreateDialogOpen(true);
   };
+
+  const handleSearchClick = () => {
+    navigate("/search");
+  };
+
+  const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const query = formData.get("q");
+    navigate(`/search?q=${encodeURIComponent(query as string)}`);
+  };
+
+  const isSearchView = location.pathname.includes("/search");
 
   return (
     <html lang="en" className="h-full">
@@ -151,19 +145,66 @@ export default function App() {
       <body className="h-full">
         <div className="flex flex-col h-full">
           <div className="flex items-center h-16 px-4 bg-white border-b border-gray-200">
-            <Header 
-              currentDate={currentDate}
-              onMenuClick={handleMenuClick}
-              onPrevClick={handlePrevClick}
-              onNextClick={handleNextClick}
-              onTodayClick={handleTodayClick}
-            />
-            <div className="ml-auto">
-              <ViewSelector 
-                currentView={getCurrentView()}
-                onViewChange={() => {}} // View changes are handled by navigation in ViewSelector
-              />
-            </div>
+            {isSearchView ? (
+              <div className="flex items-center flex-1">
+                <Link
+                  to="/calendar/week"
+                  className="p-2 hover:bg-gray-100 rounded-full mr-2"
+                  aria-label="Back to calendar"
+                >
+                  <svg className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                  </svg>
+                </Link>
+                <div className="text-xl font-medium mr-8">Search</div>
+                <Form 
+                  method="get" 
+                  action="/search"
+                  onSubmit={handleSearchSubmit}
+                  className="flex-1 max-w-2xl"
+                >
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    </div>
+                    <input
+                      type="search"
+                      name="q"
+                      placeholder="Search"
+                      autoFocus
+                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    />
+                  </div>
+                </Form>
+              </div>
+            ) : (
+              <>
+                <Header 
+                  currentDate={currentDate}
+                  onMenuClick={handleMenuClick}
+                  onPrevClick={handlePrevClick}
+                  onNextClick={handleNextClick}
+                  onTodayClick={handleTodayClick}
+                />
+                <div className="flex items-center space-x-4">
+                  <ViewSelector 
+                    currentView={getCurrentView()}
+                    onViewChange={() => {}}
+                  />
+                  <button
+                    onClick={handleSearchClick}
+                    className="p-2 hover:bg-gray-100 rounded-full"
+                    aria-label="Search"
+                  >
+                    <svg className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
           <div className="flex flex-1 overflow-hidden">
             <Sidebar 
