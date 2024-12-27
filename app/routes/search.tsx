@@ -1,8 +1,10 @@
-import { useLoaderData, useSearchParams } from "@remix-run/react";
+import { useLoaderData, useSearchParams, Link, useLocation, useNavigate, useNavigation } from "@remix-run/react";
 import { LoaderFunctionArgs, json } from "@remix-run/node";
 import { db } from "~/utils/db.server";
 import { useState, useEffect } from "react";
 import { addFavorite, removeFavorite, isFavorite, type Calendar } from "~/utils/favorites";
+import * as clientUtils from "~/utils/client";
+import LoadingSpinner from "~/components/LoadingSpinner";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
@@ -27,8 +29,42 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export default function Search() {
   const { calendars } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const navigation = useNavigation();
   const query = searchParams.get("q") || "";
   const [favorites, setFavorites] = useState<{ [key: string]: boolean }>({});
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  // Check if we're loading calendar data
+  const isLoadingCalendar = navigation.state !== "idle" && 
+    navigation.location?.search?.includes("calendarId");
+
+  // Get current calendar view
+  const getCurrentView = () => {
+    // If we're coming from a calendar view, use that view
+    const path = location.pathname;
+    if (path.includes("/calendar/day")) return "day";
+    if (path.includes("/calendar/month")) return "month";
+    if (path.includes("/calendar/week")) return "week";
+    
+    // Otherwise use the last stored view
+    return clientUtils.getLastCalendarView();
+  };
+
+  const handleCalendarClick = (calendarId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsNavigating(true);
+    const view = getCurrentView();
+    navigate(`/calendar/${view}?calendarId=${calendarId}`);
+  };
+
+  // Reset navigation state when navigation completes
+  useEffect(() => {
+    if (navigation.state === "idle") {
+      setIsNavigating(false);
+    }
+  }, [navigation.state]);
 
   useEffect(() => {
     // Initialize favorites state
@@ -41,17 +77,22 @@ export default function Search() {
 
   const toggleFavorite = (calendar: Calendar) => {
     const newState = !favorites[calendar.id];
-    setFavorites(prev => ({ ...prev, [calendar.id]: newState }));
     
-    if (newState) {
-      addFavorite(calendar);
-    } else {
-      removeFavorite(calendar.id);
+    // Only update state if it's actually changed
+    if (newState !== favorites[calendar.id]) {
+      setFavorites(prev => ({ ...prev, [calendar.id]: newState }));
+      
+      if (newState) {
+        addFavorite(calendar);
+      } else {
+        removeFavorite(calendar.id);
+      }
     }
   };
 
   return (
     <div className="flex flex-col h-full bg-white">
+      {(isLoadingCalendar || isNavigating) && <LoadingSpinner />}
       {/* Search Results */}
       <div className="flex-1 overflow-auto">
         {query && calendars.length === 0 ? (
@@ -62,10 +103,14 @@ export default function Search() {
           <div className="divide-y divide-gray-200">
             {calendars.map((calendar) => (
               <div key={calendar.id} className="flex items-center py-3 px-4 hover:bg-gray-50">
-                <div className="flex-1">
-                  <h3 className="text-lg font-medium text-gray-900">{calendar.name}</h3>
+                <Link 
+                  to={`/calendar/${getCurrentView()}?calendarId=${calendar.id}`}
+                  onClick={(e) => handleCalendarClick(calendar.id, e)}
+                  className="flex-1 group"
+                >
+                  <h3 className="text-lg font-medium text-gray-900 group-hover:text-blue-600">{calendar.name}</h3>
                   <p className="text-sm text-gray-500 mt-1">ID: {calendar.id}</p>
-                </div>
+                </Link>
                 <button
                   onClick={() => toggleFavorite(calendar)}
                   className="ml-4 p-1 rounded-full hover:bg-gray-100"

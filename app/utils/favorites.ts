@@ -1,6 +1,7 @@
 export interface Calendar {
   id: string;
   name: string;
+  icalLink: string;
 }
 
 const FAVORITES_KEY = 'calendar-favorites';
@@ -9,9 +10,28 @@ export function getFavorites(): Calendar[] {
   if (typeof window === 'undefined') return [];
   try {
     const favorites = window.localStorage.getItem(FAVORITES_KEY);
-    return favorites ? JSON.parse(favorites) : [];
+    if (!favorites) return [];
+    
+    const parsedFavorites = JSON.parse(favorites);
+    if (!Array.isArray(parsedFavorites)) return [];
+
+    // Validate each calendar object
+    return parsedFavorites.filter(cal => {
+      return (
+        cal &&
+        typeof cal === 'object' &&
+        typeof cal.id === 'string' &&
+        typeof cal.name === 'string' &&
+        typeof cal.icalLink === 'string' &&
+        cal.id.trim() !== '' &&
+        cal.name.trim() !== '' &&
+        cal.icalLink.trim() !== ''
+      );
+    });
   } catch (error) {
     console.error('Error reading favorites:', error);
+    // Clear invalid data
+    window.localStorage.removeItem(FAVORITES_KEY);
     return [];
   }
 }
@@ -23,8 +43,9 @@ export function addFavorite(calendar: Calendar): void {
     if (!favorites.some(fav => fav.id === calendar.id)) {
       favorites.push(calendar);
       window.localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
-      // Dispatch storage event for other components
-      window.dispatchEvent(new Event('storage'));
+      window.dispatchEvent(new CustomEvent('favoriteChanged', { 
+        detail: { type: 'add', calendarId: calendar.id }
+      }));
     }
   } catch (error) {
     console.error('Error adding favorite:', error);
@@ -36,9 +57,12 @@ export function removeFavorite(calendarId: string): void {
   try {
     const favorites = getFavorites();
     const updatedFavorites = favorites.filter(fav => fav.id !== calendarId);
-    window.localStorage.setItem(FAVORITES_KEY, JSON.stringify(updatedFavorites));
-    // Dispatch storage event for other components
-    window.dispatchEvent(new Event('storage'));
+    if (updatedFavorites.length !== favorites.length) {
+      window.localStorage.setItem(FAVORITES_KEY, JSON.stringify(updatedFavorites));
+      window.dispatchEvent(new CustomEvent('favoriteChanged', { 
+        detail: { type: 'remove', calendarId }
+      }));
+    }
   } catch (error) {
     console.error('Error removing favorite:', error);
   }

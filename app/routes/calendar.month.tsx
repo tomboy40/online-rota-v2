@@ -1,37 +1,78 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, useOutletContext } from "@remix-run/react";
+import { useLoaderData, useOutletContext, useNavigation } from "@remix-run/react";
 import { useCallback, useEffect } from "react";
 import { db } from "~/utils/db.server";
 import { debounce } from "~/utils/helpers";
-
-interface Event {
-  id: string;
-  title: string;
-  startTime: Date;
-  endTime: Date;
-  calendarId: string;
-}
+import { fetchCalendarEvents, filterEventsByDateRange, type CalendarEvent } from "~/utils/calendar.server";
+import { startOfMonth, endOfMonth } from "date-fns";
+import * as clientUtils from "~/utils/client";
+import LoadingSpinner from "~/components/LoadingSpinner";
 
 type ContextType = {
   currentDate: Date;
   setCurrentDate: (date: Date) => void;
+  selectedCalendarId?: string;
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const dateParam = url.searchParams.get("date");
+  const calendarId = url.searchParams.get("calendarId");
   const currentDate = dateParam ? new Date(dateParam) : new Date();
 
-  // TODO: Fetch events for the month from the database
-  const events: Event[] = [];
+  const monthStart = startOfMonth(currentDate);
+  const monthEnd = endOfMonth(currentDate);
 
-  return json({ currentDate: currentDate.toISOString(), events });
+  // Only check for prefetch requests, remove isFromSearch check
+  const isPrefetch = request.headers.get("Purpose") === "prefetch";
+
+  // Return minimal data for prefetch requests only
+  if (isPrefetch) {
+    return json({ currentDate: currentDate.toISOString(), events: [], isLoading: false });
+  }
+
+  let events: CalendarEvent[] = [];
+  let isLoading = false;
+
+  if (calendarId) {
+    isLoading = true;
+    const calendar = await db.calendar.findUnique({
+      where: { id: calendarId },
+    });
+
+    if (calendar) {
+      try {
+        const allEvents = await fetchCalendarEvents(calendar.icalLink, calendar.id);
+        events = filterEventsByDateRange(
+          allEvents,
+          monthStart,
+          monthEnd
+        );
+      } finally {
+        isLoading = false;
+      }
+    }
+  }
+
+  return json({ currentDate: currentDate.toISOString(), events, isLoading });
 }
 
 export default function CalendarMonth() {
-  const { events } = useLoaderData<typeof loader>();
+  const { events, isLoading: isDataLoading } = useLoaderData<typeof loader>();
   const { currentDate, setCurrentDate } = useOutletContext<ContextType>();
+  const navigation = useNavigation();
+  
+  // Only show loading when fetching calendar data
+  const isLoadingCalendar = navigation.state !== "idle" && 
+    (navigation.location?.search?.includes("calendarId") || isDataLoading);
+
+  // Store current view
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      clientUtils.setLastCalendarView('month');
+    }
+  }, []);
 
   // Handle mouse wheel scroll
   const handleWheel = useCallback(
@@ -99,6 +140,7 @@ export default function CalendarMonth() {
 
   return (
     <div id="month-grid" className="flex flex-col h-full bg-white">
+      {isLoadingCalendar && <LoadingSpinner />}
       {/* Month Grid */}
       <div className="grid grid-cols-7 flex-1 border-t border-l">
         {/* Day headers */}

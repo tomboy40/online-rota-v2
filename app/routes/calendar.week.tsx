@@ -1,44 +1,78 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, useOutletContext } from "@remix-run/react";
+import { useLoaderData, useOutletContext, useNavigation } from "@remix-run/react";
 import { db } from "~/utils/db.server";
-
-interface Event {
-  id: string;
-  title: string;
-  startTime: Date;
-  endTime: Date;
-  calendarId: string;
-}
+import { fetchCalendarEvents, filterEventsByDateRange, type CalendarEvent } from "~/utils/calendar.server";
+import { startOfWeek, endOfWeek, startOfDay, endOfDay } from "date-fns";
+import * as clientUtils from "~/utils/client";
+import LoadingSpinner from "~/components/LoadingSpinner";
+import CurrentTimeIndicator from "~/components/CurrentTimeIndicator";
 
 type ContextType = {
   currentDate: Date;
   setCurrentDate: (date: Date) => void;
+  selectedCalendarId?: string;
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  // Get the week's start and end dates from the URL
   const url = new URL(request.url);
   const dateParam = url.searchParams.get("date");
-  const startDate = dateParam ? new Date(dateParam) : new Date();
+  const calendarId = url.searchParams.get("calendarId");
+  const currentDate = dateParam ? new Date(dateParam) : new Date();
   
-  // Adjust to start of week (Sunday)
-  startDate.setDate(startDate.getDate() - startDate.getDay());
-  
-  // Calculate end of week
-  const endDate = new Date(startDate);
-  endDate.setDate(endDate.getDate() + 7);
+  const weekStart = startOfWeek(currentDate);
+  const weekEnd = endOfWeek(currentDate);
 
-  // TODO: Fetch events for the week from the database
-  const events: Event[] = [];
+  // Only check for prefetch requests, remove isFromSearch check
+  const isPrefetch = request.headers.get("Purpose") === "prefetch";
 
-  return json({ startDate: startDate.toISOString(), events });
+  // Return minimal data for prefetch requests only
+  if (isPrefetch) {
+    return json({ startDate: weekStart.toISOString(), events: [], isLoading: false });
+  }
+
+  let events: CalendarEvent[] = [];
+  let isLoading = false;
+
+  if (calendarId) {
+    isLoading = true;
+    const calendar = await db.calendar.findUnique({
+      where: { id: calendarId },
+    });
+
+    if (calendar) {
+      try {
+        const allEvents = await fetchCalendarEvents(calendar.icalLink, calendar.id);
+        events = filterEventsByDateRange(
+          allEvents,
+          weekStart,
+          weekEnd
+        );
+      } finally {
+        isLoading = false;
+      }
+    }
+  }
+
+  return json({ startDate: weekStart.toISOString(), events, isLoading });
 }
 
 export default function CalendarWeek() {
-  const { startDate, events } = useLoaderData<typeof loader>();
+  const { startDate, events, isLoading: isDataLoading } = useLoaderData<typeof loader>();
   const { currentDate } = useOutletContext<ContextType>();
+  const navigation = useNavigation();
+  
+  // Only show loading when fetching calendar data
+  const isLoadingCalendar = navigation.state !== "idle" && 
+    (navigation.location?.search?.includes("calendarId") || isDataLoading);
+
+  // Store current view
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      clientUtils.setLastCalendarView('week');
+    }
+  }, []);
 
   // Generate time slots (from 12 AM to 11 PM)
   const timeSlots = Array.from({ length: 24 }, (_, i) => {
@@ -71,6 +105,7 @@ export default function CalendarWeek() {
 
   return (
     <div className="flex flex-col h-full bg-white">
+      {isLoadingCalendar && <LoadingSpinner />}
       {/* Header row with days */}
       <div className="flex border-b border-gray-200 bg-white sticky top-0 z-10">
         {/* Time gutter */}
@@ -104,11 +139,12 @@ export default function CalendarWeek() {
           {timeSlots.map(({ label, hour }, index) => (
             <div
               key={index}
-              className="h-12 text-right pr-2 relative"
+              className="h-12 text-right pr-2 relative border-b border-gray-100"
             >
               <span className="text-xs text-gray-500 absolute -top-2 right-2">{label}</span>
             </div>
           ))}
+          <div className="h-12 border-b border-gray-100" />
         </div>
 
         {/* Grid columns */}
@@ -125,21 +161,62 @@ export default function CalendarWeek() {
                   className="h-12 border-b border-gray-100"
                 />
               ))}
+              <div className="h-12 border-b border-gray-100" />
 
               {/* Current time indicator */}
-              {formatColumnHeader(date).isToday && (
-                <div
-                  className="absolute left-0 right-0 flex items-center"
-                  style={{
-                    top: `${(new Date().getHours() * 60 + new Date().getMinutes()) / 1440 * 100}%`,
-                  }}
-                >
-                  <div className="w-2.5 h-2.5 rounded-full bg-red-500 -ml-1.25" />
-                  <div className="flex-1 border-t border-red-500" />
-                </div>
-              )}
+              {formatColumnHeader(date).isToday && <CurrentTimeIndicator />}
 
-              {/* Events would be rendered here */}
+              {/* Events */}
+              {events
+                .filter(event => {
+                  const eventDate = new Date(event.startTime);
+                  return eventDate.toDateString() === date.toDateString();
+                })
+                .map(event => {
+                  const startTime = new Date(event.startTime);
+                  const endTime = new Date(event.endTime);
+                  const dayStart = startOfDay(date);
+                  const dayEnd = endOfDay(date);
+
+                  // Adjust times to day boundaries if needed
+                  const adjustedStart = new Date(Math.max(startTime.getTime(), dayStart.getTime()));
+                  const adjustedEnd = new Date(Math.min(endTime.getTime(), dayEnd.getTime()));
+
+                  // Calculate position using local hours directly from Date object
+                  const startMinutes = adjustedStart.getHours() * 60 + adjustedStart.getMinutes();
+                  const endMinutes = adjustedEnd.getHours() * 60 + adjustedEnd.getMinutes();
+                  const duration = endMinutes === 0 ? 1440 - startMinutes : endMinutes - startMinutes;
+
+                  // Calculate pixels (each hour is 48px tall)
+                  const pixelsPerHour = 48;
+                  const pixelsPerMinute = pixelsPerHour / 60;
+                  const topPosition = startMinutes * pixelsPerMinute;
+                  const heightPixels = duration * pixelsPerMinute;
+
+                  return (
+                    <div
+                      key={event.id}
+                      className={`absolute left-1 right-1 bg-blue-100 border border-blue-200 p-2 overflow-hidden
+                        ${startTime < dayStart ? 'border-t-2 border-t-blue-400' : 'rounded-t-lg'}
+                        ${endTime > dayEnd ? 'border-b-2 border-b-blue-400' : 'rounded-b-lg'}`}
+                      style={{
+                        top: `${topPosition}px`,
+                        height: `${heightPixels}px`,
+                        minHeight: '20px'
+                      }}
+                    >
+                      <div className="text-sm font-semibold text-blue-800 truncate">
+                        {event.title}
+                        {(startTime < dayStart || endTime > dayEnd) && ' (...)'}
+                      </div>
+                      {heightPixels >= 8 && event.location && (
+                        <div className="text-xs text-blue-600 truncate">
+                          {event.location}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
             </div>
           ))}
         </div>
