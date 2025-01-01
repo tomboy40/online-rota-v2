@@ -102,7 +102,10 @@ export default function Header({
                           active ? 'bg-gray-100' : ''
                         } flex w-full items-center px-4 py-2 text-sm text-gray-700`}
                       >
-                        Refresh Calendar
+                        <svg className="mr-3 h-5 w-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Refresh calendar
                       </button>
                     )}
                   </Menu.Item>
@@ -114,7 +117,10 @@ export default function Header({
                           active ? 'bg-gray-100' : ''
                         } flex w-full items-center px-4 py-2 text-sm text-gray-700`}
                       >
-                        View App Details
+                        <svg className="mr-3 h-5 w-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        View app details
                       </a>
                     )}
                   </Menu.Item>
