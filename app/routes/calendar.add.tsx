@@ -1,5 +1,6 @@
 import { ActionFunctionArgs, redirect } from "@remix-run/node";
 import { db } from "~/utils/db.server";
+import { schema } from "../../drizzle";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method !== "POST") {
@@ -15,13 +16,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     throw new Error("Missing required fields");
   }
 
-  await db.calendar.create({
-    data: {
-      id: appId as string,
-      name: appName as string,
-      icalLink: icalLink as string,
-    },
+  await db.insert(schema.calendar).values({
+    id: appId as string,
+    name: appName as string,
+    icalLink: icalLink as string,
   });
 
   return redirect("/calendar/week");
-} 
+}

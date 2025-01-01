@@ -1,6 +1,7 @@
 import { useLoaderData, useSearchParams, Link, useLocation, useNavigate, useNavigation } from "@remix-run/react";
 import { LoaderFunctionArgs, json } from "@remix-run/node";
-import { db } from "~/utils/db.server";
+import { db, schema } from "~/utils/db.server";
+import { eq, like, or } from "drizzle-orm";
 import { useState, useEffect } from "react";
 import { addFavorite, removeFavorite, isFavorite, type Calendar } from "~/utils/favorites";
 import * as clientUtils from "~/utils/client";
@@ -14,14 +15,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     return json({ calendars: [] });
   }
 
-  const calendars = await db.calendar.findMany({
-    where: {
-      OR: [
-        { id: { contains: query } },
-        { name: { contains: query } }
-      ]
-    }
-  });
+  const calendars = await db.select().from(schema.calendar).where(
+    or(
+      like(schema.calendar.id, `%${query}%`),
+      like(schema.calendar.name, `%${query}%`)
+    )
+  );
 
   return json({ calendars });
 }

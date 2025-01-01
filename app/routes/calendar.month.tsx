@@ -37,8 +37,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   if (calendarId) {
     isLoading = true;
-    const calendar = await db.calendar.findUnique({
-      where: { id: calendarId },
+    const calendar = await db.query.calendar.findFirst({
+      where: (calendar, { eq }) => eq(calendar.id, calendarId)
     });
 
     if (calendar) {

@@ -114,7 +114,7 @@ export default function Header({
                           active ? 'bg-gray-100' : ''
                         } flex w-full items-center px-4 py-2 text-sm text-gray-700`}
                       >
-                        View Application Details
+                        View App Details
                       </a>
                     )}
                   </Menu.Item>

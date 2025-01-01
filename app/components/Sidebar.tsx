@@ -25,23 +25,20 @@ export default function Sidebar({ isOpen, onDateSelect, selectedDate, currentDat
   useEffect(() => {
     const loadFavorites = () => {
       const favList = getFavorites();
-      // Only update if the favorites have actually changed
-      const currentIds = new Set(favorites.map(f => f.id));
-      const newIds = new Set(favList.map(f => f.id));
-      
-      if (favList.length !== favorites.length || 
-          !favList.every(f => currentIds.has(f.id)) || 
-          !favorites.every(f => newIds.has(f.id))) {
-        setFavorites(favList);
-      }
+      setFavorites(favList);
     };
 
     loadFavorites();
     
-    // Listen for storage changes
+    // Listen for storage and favoriteChanged events
     window.addEventListener('storage', loadFavorites);
-    return () => window.removeEventListener('storage', loadFavorites);
-  }, [favorites]);
+    window.addEventListener('favoriteChanged', loadFavorites);
+    
+    return () => {
+      window.removeEventListener('storage', loadFavorites);
+      window.removeEventListener('favoriteChanged', loadFavorites);
+    };
+  }, []);
 
   // Generate dates for mini calendar
   const generateCalendarDates = () => {
