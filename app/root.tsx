@@ -148,6 +148,33 @@ export default function App() {
 
   const isSearchView = location.pathname.includes("/search");
 
+  const handleViewChange = (view: ViewOption) => {
+    const searchParams = new URLSearchParams(location.search);
+    const calendarId = searchParams.get('calendarId');
+    let path = '/calendar/';
+    
+    switch (view) {
+      case 'Day':
+        path += 'day';
+        break;
+      case 'Week':
+        path += 'week';
+        break;
+      case 'Month':
+        path += 'month';
+        break;
+    }
+
+    if (calendarId) {
+      path += `?calendarId=${calendarId}`;
+      navigate(path, {
+        state: location.state
+      });
+    } else {
+      navigate(path);
+    }
+  };
+
   return (
     <html lang="en" className="h-full">
       <head>
@@ -207,20 +234,7 @@ export default function App() {
                 <div className="flex items-center space-x-4">
                   <ViewSelector 
                     currentView={getCurrentView()}
-                    onViewChange={(view) => {
-                      const newView = view.toLowerCase();
-                      const searchParams = new URLSearchParams(location.search);
-                      const calendarId = searchParams.get('calendarId');
-                      
-                      // Preserve the calendar ID when switching views
-                      if (calendarId) {
-                        navigate(`/calendar/${newView}?calendarId=${calendarId}`, {
-                          state: location.state
-                        });
-                      } else {
-                        navigate(`/calendar/${newView}`);
-                      }
-                    }}
+                    onViewChange={handleViewChange}
                   />
                 </div>
               </>

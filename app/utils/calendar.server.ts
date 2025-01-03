@@ -121,15 +121,33 @@ export async function fetchCalendarEvents(
   }
 }
 
-export function filterEventsByDateRange(
-  events: CalendarEvent[],
-  startDate: Date,
-  endDate: Date
-): CalendarEvent[] {
+export function filterEventsByDateRange(events: CalendarEvent[], rangeStart: Date, rangeEnd: Date): CalendarEvent[] {
+  console.log('Filtering with range:', {
+    rangeStart: rangeStart.toISOString(),
+    rangeEnd: rangeEnd.toISOString()
+  });
+
   return events.filter(event => {
     const eventStart = new Date(event.startTime);
     const eventEnd = new Date(event.endTime);
-    return eventStart <= endDate && eventEnd >= startDate;
+
+    // Debug log for each event
+    console.log('Checking event:', {
+      title: event.title,
+      eventStart: eventStart.toISOString(),
+      eventEnd: eventEnd.toISOString(),
+      isWithinRange: (
+        (eventStart >= rangeStart && eventStart < rangeEnd) || // Starts within range
+        (eventEnd > rangeStart && eventEnd <= rangeEnd) ||     // Ends within range
+        (eventStart <= rangeStart && eventEnd >= rangeEnd)     // Spans the entire range
+      )
+    });
+
+    return (
+      (eventStart >= rangeStart && eventStart < rangeEnd) || // Starts within range
+      (eventEnd > rangeStart && eventEnd <= rangeEnd) ||     // Ends within range
+      (eventStart <= rangeStart && eventEnd >= rangeEnd)     // Spans the entire range
+    );
   });
 }
 
@@ -158,4 +176,12 @@ export function getCalendarCacheInfo(): { calendarId: string; eventCount: number
     eventCount: value.eventCount,
     lastUpdated: new Date(value.timestamp)
   }));
+}
+
+// Add a function to get cached events
+export function getCachedEvents(calendarId: string): CalendarEvent[] | undefined {
+  const cacheEntry = Array.from(calendarCache.entries())
+    .find(([key]) => key.includes(calendarId));
+  
+  return cacheEntry?.[1].events;
 } 

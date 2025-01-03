@@ -8,6 +8,7 @@ import { startOfWeek, endOfWeek, startOfDay, endOfDay } from "date-fns";
 import * as clientUtils from "~/utils/client";
 import LoadingSpinner from "~/components/LoadingSpinner";
 import CurrentTimeIndicator from "~/components/CurrentTimeIndicator";
+import EventDetailsDialog from '~/components/EventDetailsDialog';
 
 type ContextType = {
   currentDate: Date;
@@ -17,19 +18,13 @@ type ContextType = {
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
-  const dateParam = url.searchParams.get("date");
   const calendarId = url.searchParams.get("calendarId");
-  const currentDate = dateParam ? new Date(dateParam) : new Date();
   
-  const weekStart = startOfWeek(currentDate);
-  const weekEnd = endOfWeek(currentDate);
-
-  // Only check for prefetch requests, remove isFromSearch check
+  // Only check for prefetch requests
   const isPrefetch = request.headers.get("Purpose") === "prefetch";
 
-  // Return minimal data for prefetch requests only
   if (isPrefetch) {
-    return json({ startDate: weekStart.toISOString(), events: [], isLoading: false });
+    return json({ events: [], isLoading: false });
   }
 
   let events: CalendarEvent[] = [];
@@ -43,29 +38,60 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
     if (calendar) {
       try {
-        const allEvents = await fetchCalendarEvents(calendar.icalLink, calendar.id);
-        events = filterEventsByDateRange(
-          allEvents,
-          weekStart,
-          weekEnd
-        );
+        events = await fetchCalendarEvents(calendar.icalLink, calendar.id);
       } finally {
         isLoading = false;
       }
     }
   }
 
-  return json({ startDate: weekStart.toISOString(), events, isLoading });
+  return json({ events, isLoading });
 }
 
 export default function CalendarWeek() {
-  const { startDate, events, isLoading: isDataLoading } = useLoaderData<typeof loader>();
+  const { events, isLoading: isDataLoading } = useLoaderData<typeof loader>();
   const { currentDate } = useOutletContext<ContextType>();
   const navigation = useNavigation();
-  
-  // Only show loading when fetching calendar data
-  const isLoadingCalendar = navigation.state !== "idle" && 
-    (navigation.location?.search?.includes("calendarId") || isDataLoading);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+
+  // Get the start and end of the week
+  const weekStart = new Date(currentDate);
+  weekStart.setDate(currentDate.getDate() - currentDate.getDay()); // Start of week (Sunday)
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6); // End of week (Saturday)
+
+  // Filter events for the current week
+  const weekEvents = events
+    .map(event => {
+      try {
+        const startTime = new Date(event.startTime);
+        const endTime = new Date(event.endTime);
+
+        if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+          return null;
+        }
+
+        // Check if event overlaps with the week
+        if (endTime < startOfDay(weekStart) || startTime > endOfDay(weekEnd)) {
+          return null;
+        }
+
+        return {
+          ...event,
+          startTime,
+          endTime
+        };
+      } catch (error) {
+        console.error('Error parsing event dates:', error, event);
+        return null;
+      }
+    })
+    .filter((event): event is NonNullable<typeof event> => event !== null);
+
+  // Update loading condition to only show when fetching new calendar data
+  const isLoadingCalendar = navigation.state === "loading" && 
+    navigation.location.search !== location.search &&
+    navigation.location.search.includes("calendarId");
 
   // Store current view
   useEffect(() => {
@@ -167,7 +193,7 @@ export default function CalendarWeek() {
               {formatColumnHeader(date).isToday && <CurrentTimeIndicator />}
 
               {/* Events */}
-              {events
+              {weekEvents
                 .filter(event => {
                   const eventDate = new Date(event.startTime);
                   return eventDate.toDateString() === date.toDateString();
@@ -196,7 +222,7 @@ export default function CalendarWeek() {
                   return (
                     <div
                       key={event.id}
-                      className={`absolute left-1 right-1 bg-blue-100 border border-blue-200 p-2 overflow-hidden
+                      className={`absolute left-1 right-1 bg-blue-100 border border-blue-200 p-2 overflow-hidden cursor-pointer
                         ${startTime < dayStart ? 'border-t-2 border-t-blue-400' : 'rounded-t-lg'}
                         ${endTime > dayEnd ? 'border-b-2 border-b-blue-400' : 'rounded-b-lg'}`}
                       style={{
@@ -204,6 +230,7 @@ export default function CalendarWeek() {
                         height: `${heightPixels}px`,
                         minHeight: '20px'
                       }}
+                      onClick={() => setSelectedEvent(event)}
                     >
                       <div className="text-sm font-semibold text-blue-800 truncate">
                         {event.title}
@@ -221,6 +248,12 @@ export default function CalendarWeek() {
           ))}
         </div>
       </div>
+
+      <EventDetailsDialog
+        event={selectedEvent}
+        isOpen={selectedEvent !== null}
+        onClose={() => setSelectedEvent(null)}
+      />
     </div>
   );
 } 

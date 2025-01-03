@@ -1,4 +1,4 @@
-import { Link } from "@remix-run/react";
+import { Link, useLocation, useNavigate } from "@remix-run/react";
 
 export type ViewOption = "Day" | "Week" | "Month";
 
@@ -8,6 +8,38 @@ interface ViewSelectorProps {
 }
 
 export default function ViewSelector({ currentView, onViewChange }: ViewSelectorProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  const handleViewChange = (view: ViewOption) => {
+    const currentSearchParams = new URLSearchParams(location.search);
+    const calendarId = currentSearchParams.get('calendarId');
+    
+    let path = '/calendar/';
+    switch (view) {
+      case 'Day':
+        path += 'day';
+        break;
+      case 'Week':
+        path += 'week';
+        break;
+      case 'Month':
+        path += 'month';
+        break;
+    }
+
+    // Preserve the calendarId when switching views
+    if (calendarId) {
+      path += `?calendarId=${calendarId}`;
+      navigate(path, {
+        state: location.state // Preserve the existing state
+      });
+    } else {
+      navigate(path);
+    }
+    onViewChange(view);
+  };
+
   const views: ViewOption[] = ["Day", "Week", "Month"];
 
   return (
@@ -15,10 +47,9 @@ export default function ViewSelector({ currentView, onViewChange }: ViewSelector
       {views.map((view) => {
         const isActive = currentView === view;
         return (
-          <Link
+          <button
             key={view}
-            to={`/calendar/${view.toLowerCase()}`}
-            onClick={() => onViewChange(view)}
+            onClick={() => handleViewChange(view)}
             className={`px-3 py-1.5 text-sm font-medium rounded-md ${
               isActive
                 ? "bg-white text-gray-900 shadow"
@@ -26,7 +57,7 @@ export default function ViewSelector({ currentView, onViewChange }: ViewSelector
             }`}
           >
             {view}
-          </Link>
+          </button>
         );
       })}
     </div>

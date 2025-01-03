@@ -2,12 +2,13 @@ import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData, useOutletContext, useNavigation } from "@remix-run/react";
 import { db } from "~/utils/db.server";
-import { fetchCalendarEvents, filterEventsByDateRange, type CalendarEvent } from "~/utils/calendar.server";
+import { fetchCalendarEvents, filterEventsByDateRange, type CalendarEvent, getCachedEvents } from "~/utils/calendar.server";
 import { startOfDay, endOfDay, parseISO } from "date-fns";
 import CurrentTimeIndicator from "~/components/CurrentTimeIndicator";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import * as clientUtils from "~/utils/client";
 import LoadingSpinner from "~/components/LoadingSpinner";
+import EventDetailsDialog from '~/components/EventDetailsDialog';
 
 type ContextType = {
   currentDate: Date;
@@ -17,16 +18,10 @@ type ContextType = {
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
-  const dateParam = url.searchParams.get("date");
   const calendarId = url.searchParams.get("calendarId");
-  const currentDate = dateParam ? new Date(dateParam) : new Date();
-
-  // Only check for prefetch requests, remove isFromSearch check
-  const isPrefetch = request.headers.get("Purpose") === "prefetch";
-
-  // Return minimal data for prefetch requests only
-  if (isPrefetch) {
-    return json({ currentDate: currentDate.toISOString(), events: [], isLoading: false });
+  
+  if (request.headers.get("Purpose") === "prefetch") {
+    return json({ events: [], isLoading: false });
   }
 
   let events: CalendarEvent[] = [];
@@ -34,35 +29,38 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   if (calendarId) {
     isLoading = true;
+    // Try to get events from cache first
+    const cachedEvents = getCachedEvents(calendarId);
+    if (cachedEvents) {
+      return json({ events: cachedEvents, isLoading: false });
+    }
+
     const calendar = await db.query.calendar.findFirst({
       where: (calendar, { eq }) => eq(calendar.id, calendarId)
     });
 
     if (calendar) {
       try {
-        const allEvents = await fetchCalendarEvents(calendar.icalLink, calendar.id);
-        events = filterEventsByDateRange(
-          allEvents,
-          startOfDay(currentDate),
-          endOfDay(currentDate)
-        );
+        events = await fetchCalendarEvents(calendar.icalLink, calendar.id);
       } finally {
         isLoading = false;
       }
     }
   }
 
-  return json({ currentDate: currentDate.toISOString(), events, isLoading });
+  return json({ events, isLoading });
 }
 
 export default function CalendarDay() {
-  const { events, currentDate: currentDateStr, isLoading: isDataLoading } = useLoaderData<typeof loader>();
+  const { events, isLoading: isDataLoading } = useLoaderData<typeof loader>();
   const { currentDate } = useOutletContext<ContextType>();
   const navigation = useNavigation();
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   
-  // Only show loading when fetching calendar data
-  const isLoadingCalendar = navigation.state !== "idle" && 
-    (navigation.location?.search?.includes("calendarId") || isDataLoading);
+  // Update loading condition to only show when fetching new calendar data
+  const isLoadingCalendar = navigation.state === "loading" && 
+    navigation.location.search !== location.search && // Only when calendar ID changes
+    navigation.location.search.includes("calendarId");
 
   // Store current view
   useEffect(() => {
@@ -70,6 +68,10 @@ export default function CalendarDay() {
       clientUtils.setLastCalendarView('day');
     }
   }, []);
+
+  // Add debug logging
+  console.log('Day View - Raw Events:', events);
+  console.log('Day View - Current Date:', currentDate);
 
   // Parse the events dates and validate them
   const parsedEvents = events
@@ -83,9 +85,14 @@ export default function CalendarDay() {
           return null;
         }
 
-        // Adjust start and end times to the current day's boundaries if needed
+        // Use the currentDate from context for day boundaries
         const dayStart = startOfDay(currentDate);
         const dayEnd = endOfDay(currentDate);
+
+        // Check if event overlaps with current day
+        if (endTime < dayStart || startTime > dayEnd) {
+          return null; // Skip events not in current day
+        }
         
         const adjustedStart = new Date(Math.max(startTime.getTime(), dayStart.getTime()));
         const adjustedEnd = new Date(Math.min(endTime.getTime(), dayEnd.getTime()));
@@ -103,6 +110,9 @@ export default function CalendarDay() {
       }
     })
     .filter((event): event is NonNullable<typeof event> => event !== null);
+
+  // Add debug logging for parsed events
+  console.log('Day View - Parsed Events:', parsedEvents);
 
   // Generate time slots (from 12 AM to 11 PM)
   const timeSlots = Array.from({ length: 24 }, (_, i) => {
@@ -201,10 +211,18 @@ export default function CalendarDay() {
             const topPosition = startMinutes * pixelsPerMinute;
             const heightPixels = duration * pixelsPerMinute;
 
+            console.log('Filtering event:', {
+              title: event.title,
+              eventStart,
+              eventEnd,
+              dayStart,
+              dayEnd
+            });
+
             return (
               <div
                 key={event.id}
-                className={`absolute left-1 right-1 bg-blue-100 border border-blue-200 p-2 overflow-hidden
+                className={`absolute left-1 right-1 bg-blue-100 border border-blue-200 p-2 overflow-hidden cursor-pointer
                   ${event.continuesFromPrevDay ? 'border-t-2 border-t-blue-400' : 'rounded-t-lg'}
                   ${event.continuesNextDay ? 'border-b-2 border-b-blue-400' : 'rounded-b-lg'}`}
                 style={{
@@ -212,6 +230,7 @@ export default function CalendarDay() {
                   height: `${heightPixels}px`,
                   minHeight: '20px'
                 }}
+                onClick={() => setSelectedEvent(event)}
               >
                 <div className="text-sm font-semibold text-blue-800 truncate">
                   {event.title}
@@ -227,6 +246,13 @@ export default function CalendarDay() {
           })}
         </div>
       </div>
+
+      {/* Event Details Dialog */}
+      <EventDetailsDialog
+        event={selectedEvent}
+        isOpen={selectedEvent !== null}
+        onClose={() => setSelectedEvent(null)}
+      />
     </div>
   );
 } 

@@ -1,13 +1,14 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData, useOutletContext, useNavigation } from "@remix-run/react";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { db } from "~/utils/db.server";
 import { debounce } from "~/utils/helpers";
 import { fetchCalendarEvents, filterEventsByDateRange, type CalendarEvent } from "~/utils/calendar.server";
-import { startOfMonth, endOfMonth } from "date-fns";
+import { startOfMonth, endOfMonth, startOfDay, endOfDay } from "date-fns";
 import * as clientUtils from "~/utils/client";
 import LoadingSpinner from "~/components/LoadingSpinner";
+import EventDetailsDialog from "~/components/EventDetailsDialog";
 
 type ContextType = {
   currentDate: Date;
@@ -17,19 +18,13 @@ type ContextType = {
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
-  const dateParam = url.searchParams.get("date");
   const calendarId = url.searchParams.get("calendarId");
-  const currentDate = dateParam ? new Date(dateParam) : new Date();
-
-  const monthStart = startOfMonth(currentDate);
-  const monthEnd = endOfMonth(currentDate);
-
-  // Only check for prefetch requests, remove isFromSearch check
+  
+  // Only check for prefetch requests
   const isPrefetch = request.headers.get("Purpose") === "prefetch";
 
-  // Return minimal data for prefetch requests only
   if (isPrefetch) {
-    return json({ currentDate: currentDate.toISOString(), events: [], isLoading: false });
+    return json({ events: [], isLoading: false });
   }
 
   let events: CalendarEvent[] = [];
@@ -43,29 +38,65 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
     if (calendar) {
       try {
-        const allEvents = await fetchCalendarEvents(calendar.icalLink, calendar.id);
-        events = filterEventsByDateRange(
-          allEvents,
-          monthStart,
-          monthEnd
-        );
+        events = await fetchCalendarEvents(calendar.icalLink, calendar.id);
       } finally {
         isLoading = false;
       }
     }
   }
 
-  return json({ currentDate: currentDate.toISOString(), events, isLoading });
+  return json({ events, isLoading });
 }
 
 export default function CalendarMonth() {
   const { events, isLoading: isDataLoading } = useLoaderData<typeof loader>();
   const { currentDate, setCurrentDate } = useOutletContext<ContextType>();
   const navigation = useNavigation();
-  
-  // Only show loading when fetching calendar data
-  const isLoadingCalendar = navigation.state !== "idle" && 
-    (navigation.location?.search?.includes("calendarId") || isDataLoading);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+
+  // Get the start and end of the month
+  const monthStart = startOfMonth(currentDate);
+  const monthEnd = endOfMonth(currentDate);
+
+  // Filter events for each day
+  const getEventsForDate = (date: Date) => {
+    return events
+      .map(event => {
+        try {
+          const startTime = new Date(event.startTime);
+          const endTime = new Date(event.endTime);
+
+          if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+            return null;
+          }
+
+          const dayStart = startOfDay(date);
+          const dayEnd = endOfDay(date);
+
+          // Check if event overlaps with the day
+          if (endTime < dayStart || startTime > dayEnd) {
+            return null;
+          }
+
+          return {
+            ...event,
+            startTime,
+            endTime,
+            continuesFromPrevDay: startTime < dayStart,
+            continuesNextDay: endTime > dayEnd
+          };
+        } catch (error) {
+          console.error('Error parsing event dates:', error, event);
+          return null;
+        }
+      })
+      .filter((event): event is NonNullable<typeof event> => event !== null);
+  };
+
+  // Update loading condition to only show when fetching new calendar data
+  const isLoadingCalendar = navigation.state === "loading" && 
+    navigation.location.search !== location.search &&
+    navigation.location.search.includes("calendarId");
 
   // Store current view
   useEffect(() => {
@@ -169,26 +200,29 @@ export default function CalendarMonth() {
                 </div>
                 {/* Events */}
                 <div className="px-2 space-y-1">
-                  {events
-                    .filter(event => {
-                      const eventDate = new Date(event.startTime);
-                      return eventDate.toDateString() === date.toDateString();
-                    })
-                    .map(event => (
-                      <div
-                        key={event.id}
-                        className="text-xs bg-blue-100 text-blue-700 rounded px-2 py-1 truncate hover:bg-blue-200 cursor-pointer"
-                      >
-                        {event.title}
-                      </div>
-                    ))
-                  }
+                  {getEventsForDate(date).map(event => (
+                    <div
+                      key={event.id}
+                      className="text-xs bg-blue-100 text-blue-700 rounded px-2 py-1 truncate hover:bg-blue-200 cursor-pointer"
+                      onClick={() => setSelectedEvent(event)}
+                    >
+                      {event.title}
+                      {(event.continuesFromPrevDay || event.continuesNextDay) && ' (...)'}
+                    </div>
+                  ))}
                 </div>
               </>
             )}
           </div>
         ))}
       </div>
+
+      {/* Event Details Dialog */}
+      <EventDetailsDialog
+        event={selectedEvent}
+        isOpen={selectedEvent !== null}
+        onClose={() => setSelectedEvent(null)}
+      />
     </div>
   );
 } 
