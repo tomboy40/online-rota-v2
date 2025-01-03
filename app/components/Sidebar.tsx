@@ -25,18 +25,29 @@ export default function Sidebar({ isOpen, onDateSelect, selectedDate, currentDat
   useEffect(() => {
     const loadFavorites = () => {
       const favList = getFavorites();
+      console.log('Sidebar: Loading favorites:', favList);
       setFavorites(favList);
     };
 
     loadFavorites();
     
     // Listen for storage and favoriteChanged events
-    window.addEventListener('storage', loadFavorites);
-    window.addEventListener('favoriteChanged', loadFavorites);
+    const handleStorageChange = () => {
+      console.log('Sidebar: Storage changed');
+      loadFavorites();
+    };
+
+    const handleFavoriteChange = (event: Event) => {
+      console.log('Sidebar: Favorite changed event:', (event as CustomEvent).detail);
+      loadFavorites();
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('favoriteChanged', handleFavoriteChange);
     
     return () => {
-      window.removeEventListener('storage', loadFavorites);
-      window.removeEventListener('favoriteChanged', loadFavorites);
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('favoriteChanged', handleFavoriteChange);
     };
   }, []);
 
@@ -190,7 +201,7 @@ export default function Sidebar({ isOpen, onDateSelect, selectedDate, currentDat
           </button>
           
           {isQuickAccessOpen && (
-            <div className="mt-2 space-y-1">
+            <div className="mt-2 space-y-1" style={{ position: 'relative' }}>
               {favorites.length === 0 ? (
                 <p className="text-sm text-gray-500 px-6 py-1">No favorites yet</p>
               ) : (

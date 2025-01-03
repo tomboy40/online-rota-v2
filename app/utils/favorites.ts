@@ -2,6 +2,7 @@ export interface Calendar {
   id: string;
   name: string;
   icalLink: string;
+  icalUrl?: string;
 }
 
 const FAVORITES_KEY = 'calendar-favorites';

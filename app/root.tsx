@@ -257,6 +257,7 @@ export default function App() {
           isOpen={isCreateDialogOpen}
           onClose={() => setIsCreateDialogOpen(false)}
         />
+        <div id="portal-container" />
         <ScrollRestoration />
         <Scripts />
         <LiveReload />
