@@ -1,5 +1,12 @@
 import { useLocation, Link } from "@remix-run/react";
-import { MagnifyingGlassIcon, Cog6ToothIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { 
+  MagnifyingGlassIcon, 
+  Cog6ToothIcon, 
+  ChevronDownIcon,
+  ArrowPathIcon,
+  InformationCircleIcon,
+  Bars3Icon
+} from '@heroicons/react/24/outline';
 import { Menu } from '@headlessui/react';
 import CalendarSettings from './CalendarSettings';
 
@@ -71,9 +78,7 @@ export default function Header({
           className="p-2 hover:bg-gray-100 rounded-full"
           aria-label="Toggle menu"
         >
-          <svg className="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
+          <Bars3Icon className="h-6 w-6 text-gray-600" aria-hidden="true" />
         </button>
 
         <div className="flex items-center space-x-2">
@@ -87,7 +92,7 @@ export default function Header({
         {calendarName && calendarName !== 'Calendar' && (
           <div className="flex items-center space-x-2">
             <span className="text-gray-600">|</span>
-            <span className="text-gray-900">{calendarName}</span>
+            <span className="text-xl font-semibold text-gray-900">{calendarName}</span>
             <Menu as="div" className="relative">
               <Menu.Button className="p-1 hover:bg-gray-100 rounded-full">
                 <ChevronDownIcon className="h-5 w-5 text-gray-600" aria-hidden="true" />
@@ -102,9 +107,7 @@ export default function Header({
                           active ? 'bg-gray-100' : ''
                         } flex w-full items-center px-4 py-2 text-sm text-gray-700`}
                       >
-                        <svg className="mr-3 h-5 w-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
+                        <ArrowPathIcon className="mr-3 h-5 w-5 text-gray-400" aria-hidden="true" />
                         Refresh calendar
                       </button>
                     )}
@@ -117,9 +120,7 @@ export default function Header({
                           active ? 'bg-gray-100' : ''
                         } flex w-full items-center px-4 py-2 text-sm text-gray-700`}
                       >
-                        <svg className="mr-3 h-5 w-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
+                        <InformationCircleIcon className="mr-3 h-5 w-5 text-gray-400" aria-hidden="true" />
                         View app details
                       </a>
                     )}
@@ -132,7 +133,7 @@ export default function Header({
       </div>
 
       {/* Center Section: Navigation Controls */}
-      <div className="flex items-center space-x-4">
+      <div className="flex-1 flex items-center space-x-4 ml-8">
         <button
           onClick={onTodayClick}
           className="px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-lg"
