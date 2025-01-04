@@ -1,6 +1,30 @@
 import ICAL from 'ical.js';
 import { db, schema } from '~/utils/db.server';
 import { eq } from 'drizzle-orm';
+import type { Calendar } from './favorites';
+
+// Add a server-safe version of getFavorites
+function getServerFavorites(): Calendar[] {
+  try {
+    // In the future, we might want to fetch this from the database
+    // For now, return an empty array on the server
+    return [];
+  } catch (error) {
+    console.error('Error getting server favorites:', error);
+    return [];
+  }
+}
+
+// Helper function to get favorites that works on both client and server
+function getSafeFavorites(): Calendar[] {
+  if (typeof window === 'undefined') {
+    return getServerFavorites();
+  }
+  
+  // Dynamic import for client-side only code
+  const { getFavorites } = require('./favorites');
+  return getFavorites();
+}
 
 export interface DateRangeSettings {
   months: number; // number of months before and after current date
@@ -24,6 +48,7 @@ export interface CalendarEvent {
   location?: string;
   calendarId: string;
   recurrenceId?: string;
+  color?: string;
 }
 
 export async function fetchCalendarEvents(
@@ -102,21 +127,30 @@ export async function fetchCalendarEvents(
       }
     });
 
+    // Get current colors from favorites before caching
+    const favorites = getSafeFavorites();
+    const calendarColors = new Map(favorites.map(cal => [cal.id, cal.color]));
+
+    const processedEvents = events.map(event => ({
+      ...event,
+      color: calendarColors.get(event.calendarId)
+    }));
+
     // Store in cache before returning
     const cacheEntry: CacheEntry = {
-      events,
+      events: processedEvents,
       timestamp: Date.now(),
-      eventCount: events.length,
+      eventCount: processedEvents.length,
       dateRange
     };
     calendarCache.set(cacheKey, cacheEntry);
     
-    console.log(`[Calendar Cache] Processed ${events.length} events for ${calendarId} with ±${dateRange.months} month range`);
-    if (events.length > 1000) {
-      console.warn(`[Calendar Cache] Large number of events (${events.length}) for ${calendarId}. Consider reducing date range.`);
+    console.log(`[Calendar Cache] Processed ${processedEvents.length} events for ${calendarId} with ±${dateRange.months} month range`);
+    if (processedEvents.length > 1000) {
+      console.warn(`[Calendar Cache] Large number of events (${processedEvents.length}) for ${calendarId}. Consider reducing date range.`);
     }
 
-    return events;
+    return processedEvents;
   } catch (error) {
     console.error('Error fetching calendar events:', error);
     throw error;
@@ -185,7 +219,18 @@ export function getCachedEvents(calendarId: string): CalendarEvent[] | undefined
   const cacheEntry = Array.from(calendarCache.entries())
     .find(([key]) => key.includes(calendarId));
   
-  return cacheEntry?.[1].events;
+  if (cacheEntry) {
+    // Update colors from current favorites
+    const favorites = getSafeFavorites();
+    const calendarColors = new Map(favorites.map(cal => [cal.id, cal.color]));
+    
+    return cacheEntry[1].events.map(event => ({
+      ...event,
+      color: calendarColors.get(event.calendarId)
+    }));
+  }
+  
+  return undefined;
 }
 
 export async function refreshCalendarCache(calendarId: string) {

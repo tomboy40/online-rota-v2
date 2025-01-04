@@ -9,6 +9,7 @@ import { startOfMonth, endOfMonth, startOfDay, endOfDay } from "date-fns";
 import * as clientUtils from "~/utils/client";
 import LoadingSpinner from "~/components/LoadingSpinner";
 import EventDetailsDialog from "~/components/EventDetailsDialog";
+import { getFavorites } from "~/utils/favorites";
 
 type ContextType = {
   currentDate: Date;
@@ -46,14 +47,64 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
   }
 
-  return json({ events, isLoading });
+  // Get calendar colors from favorites
+  const favorites = getFavorites();
+  const calendarColors = new Map(
+    favorites.map(cal => [cal.id, cal.color || '#3b82f6'])
+  );
+
+  // Add color to each event
+  const eventsWithColors = events.map(event => ({
+    ...event,
+    color: calendarColors.get(event.calendarId)
+  }));
+
+  return json({ events: eventsWithColors, isLoading });
 }
 
 export default function CalendarMonth() {
-  const { events, isLoading: isDataLoading } = useLoaderData<typeof loader>();
+  const { events: initialEvents, isLoading: isDataLoading } = useLoaderData<typeof loader>();
   const { currentDate, setCurrentDate, visibleCalendars } = useOutletContext<ContextType>();
   const navigation = useNavigation();
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [events, setEvents] = useState(initialEvents);
+  const [favorites, setFavorites] = useState<Calendar[]>([]);
+
+  // Load favorites and their colors
+  useEffect(() => {
+    setFavorites(getFavorites());
+  }, []);
+
+  // Listen for color changes
+  useEffect(() => {
+    const handleFavoriteChange = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail.type === 'colorUpdate') {
+        const { calendarId, color } = customEvent.detail;
+        setFavorites(getFavorites()); // Update favorites
+        setEvents(prevEvents => 
+          prevEvents.map(event => 
+            event.calendarId === calendarId 
+              ? { ...event, color } 
+              : event
+          )
+        );
+      }
+    };
+
+    window.addEventListener('favoriteChanged', handleFavoriteChange);
+    return () => window.removeEventListener('favoriteChanged', handleFavoriteChange);
+  }, []);
+
+  // Update events when initialEvents changes
+  useEffect(() => {
+    // Apply current favorite colors to new events
+    const favColors = new Map(favorites.map(f => [f.id, f.color]));
+    setEvents(initialEvents.map(event => ({
+      ...event,
+      color: favColors.get(event.calendarId) || event.color
+    })));
+  }, [initialEvents, favorites]);
 
   // Get the start and end of the month
   const monthStart = startOfMonth(currentDate);
@@ -208,7 +259,14 @@ export default function CalendarMonth() {
                   {filterEvents(getEventsForDate(date)).map(event => (
                     <div
                       key={event.id}
-                      className="text-xs bg-blue-100 text-blue-700 rounded px-2 py-1 truncate hover:bg-blue-200 cursor-pointer"
+                      className="text-xs px-2 py-1 truncate hover:opacity-80 cursor-pointer rounded"
+                      style={{
+                        backgroundColor: event.color ? `${event.color}20` : '#3b82f620',
+                        color: event.color || '#3b82f6',
+                        borderWidth: '1px',
+                        borderStyle: 'solid',
+                        borderColor: event.color || '#3b82f6'
+                      }}
                       onClick={() => setSelectedEvent(event)}
                     >
                       {event.title}

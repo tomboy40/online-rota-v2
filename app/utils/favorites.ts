@@ -3,21 +3,22 @@ export interface Calendar {
   name: string;
   icalLink: string;
   icalUrl?: string;
+  color?: string;
 }
 
-const FAVORITES_KEY = 'calendar-favorites';
+const STORAGE_KEY = 'calendars'; // Single storage key for all calendar data
 
 export function getFavorites(): Calendar[] {
   if (typeof window === 'undefined') return [];
   try {
-    const favorites = window.localStorage.getItem(FAVORITES_KEY);
-    if (!favorites) return [];
+    const data = window.localStorage.getItem(STORAGE_KEY);
+    if (!data) return [];
     
-    const parsedFavorites = JSON.parse(favorites);
-    if (!Array.isArray(parsedFavorites)) return [];
+    const calendars = JSON.parse(data);
+    if (!Array.isArray(calendars)) return [];
 
     // Validate each calendar object
-    return parsedFavorites.filter(cal => {
+    return calendars.filter(cal => {
       return (
         cal &&
         typeof cal === 'object' &&
@@ -30,9 +31,8 @@ export function getFavorites(): Calendar[] {
       );
     });
   } catch (error) {
-    console.error('Error reading favorites:', error);
-    // Clear invalid data
-    window.localStorage.removeItem(FAVORITES_KEY);
+    console.error('Error reading calendar data:', error);
+    window.localStorage.removeItem(STORAGE_KEY);
     return [];
   }
 }
@@ -40,42 +40,79 @@ export function getFavorites(): Calendar[] {
 export function addFavorite(calendar: Calendar): void {
   if (typeof window === 'undefined') return;
   try {
-    const favorites = getFavorites();
-    if (!favorites.some(fav => fav.id === calendar.id)) {
-      favorites.push(calendar);
-      window.localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
+    const calendars = getFavorites();
+    if (!calendars.some(cal => cal.id === calendar.id)) {
+      calendars.push(calendar);
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(calendars));
       window.dispatchEvent(new CustomEvent('favoriteChanged', { 
         detail: { type: 'add', calendarId: calendar.id }
       }));
     }
   } catch (error) {
-    console.error('Error adding favorite:', error);
+    console.error('Error adding calendar:', error);
   }
 }
 
 export function removeFavorite(calendarId: string): void {
   if (typeof window === 'undefined') return;
   try {
-    const favorites = getFavorites();
-    const updatedFavorites = favorites.filter(fav => fav.id !== calendarId);
-    if (updatedFavorites.length !== favorites.length) {
-      window.localStorage.setItem(FAVORITES_KEY, JSON.stringify(updatedFavorites));
+    const calendars = getFavorites();
+    const updatedCalendars = calendars.filter(cal => cal.id !== calendarId);
+    if (updatedCalendars.length !== calendars.length) {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCalendars));
       window.dispatchEvent(new CustomEvent('favoriteChanged', { 
         detail: { type: 'remove', calendarId }
       }));
     }
   } catch (error) {
-    console.error('Error removing favorite:', error);
+    console.error('Error removing calendar:', error);
   }
 }
 
 export function isFavorite(calendarId: string): boolean {
   if (typeof window === 'undefined') return false;
   try {
-    const favorites = getFavorites();
-    return favorites.some(fav => fav.id === calendarId);
+    const calendars = getFavorites();
+    return calendars.some(cal => cal.id === calendarId);
   } catch (error) {
-    console.error('Error checking favorite status:', error);
+    console.error('Error checking calendar status:', error);
     return false;
+  }
+}
+
+export function updateCalendarColor(calendarId: string, color: string) {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const calendars = getFavorites();
+    const calendar = calendars.find(cal => cal.id === calendarId);
+    
+    if (calendar) {
+      const updatedCalendars = calendars.map(cal => 
+        cal.id === calendarId ? { ...cal, color } : cal
+      );
+      
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCalendars));
+
+      // Use the correct import path with ~ alias
+      import('~/utils/calendar.server').then(({ clearCalendarCache }) => {
+        if (calendar.icalLink) {
+          clearCalendarCache(calendar.icalLink, calendarId);
+        }
+      }).catch(error => {
+        console.error('Error importing clearCalendarCache:', error);
+      });
+      
+      window.dispatchEvent(new CustomEvent('favoriteChanged', {
+        detail: { 
+          type: 'colorUpdate', 
+          calendarId, 
+          color,
+          timestamp: Date.now()
+        }
+      }));
+    }
+  } catch (error) {
+    console.error('Error updating calendar color:', error);
   }
 } 

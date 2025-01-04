@@ -8,12 +8,13 @@ import {
   ArrowPathIcon
 } from '@heroicons/react/24/outline';
 import type { Calendar } from "~/utils/favorites";
-import { removeFavorite } from "~/utils/favorites";
+import { removeFavorite, updateCalendarColor } from "~/utils/favorites";
 import EditCalendarDialog from './EditCalendarDialog';
 import LoadingSpinner from './LoadingSpinner';
 import { useState, useEffect } from "react";
 import { CalendarRefreshSpinner } from "~/routes/calendar.refresh-cache";
 import { useLoading } from '~/contexts/LoadingContext';
+import { ColorPicker } from './ColorPicker';
 
 // Add type for refresh cache response
 interface RefreshCacheResponse {
@@ -25,17 +26,19 @@ interface RefreshCacheResponse {
 }
 
 interface CalendarLinkProps {
-  calendar: Calendar;
+  calendar: Calendar & { color?: string };
   onRefreshCalendar?: () => void;
   isVisible?: boolean;
   onVisibilityChange?: (calendarId: string, isVisible: boolean) => void;
+  onColorChange?: (calendarId: string, color: string) => void;
 }
 
 export default function CalendarLink({ 
   calendar, 
   onRefreshCalendar,
   isVisible = true,
-  onVisibilityChange 
+  onVisibilityChange,
+  onColorChange
 }: CalendarLinkProps) {
   const location = useLocation();
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -95,9 +98,10 @@ export default function CalendarLink({
           <Switch
             checked={isVisible}
             onChange={handleVisibilityChange}
-            className={`${
-              isVisible ? 'bg-blue-600' : 'bg-gray-200'
-            } relative inline-flex h-4 w-7 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2`}
+            className={`relative inline-flex h-4 w-7 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2`}
+            style={{
+              backgroundColor: isVisible ? (calendar.color || '#3b82f6') : '#e5e7eb'
+            }}
           >
             <span className="sr-only">Show calendar</span>
             <span
@@ -124,6 +128,22 @@ export default function CalendarLink({
           </Menu.Button>
 
           <Menu.Items className="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+            <Menu.Item>
+              {({ active }) => (
+                <div className="px-4 py-2">
+                  <div className="text-sm text-gray-700 mb-2">Calendar Color</div>
+                  <ColorPicker
+                    selectedColor={calendar.color || '#3b82f6'}
+                    onColorSelect={(color) => {
+                      updateCalendarColor(calendar.id, color);
+                      if (onColorChange) {
+                        onColorChange(calendar.id, color);
+                      }
+                    }}
+                  />
+                </div>
+              )}
+            </Menu.Item>
             <Menu.Item>
               {({ active }) => (
                 <button

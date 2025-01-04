@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import * as clientUtils from "~/utils/client";
 import LoadingSpinner from "~/components/LoadingSpinner";
 import EventDetailsDialog from '~/components/EventDetailsDialog';
+import { getFavorites } from "~/utils/favorites";
 
 type ContextType = {
   currentDate: Date;
@@ -49,15 +50,65 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
   }
 
-  return json({ events, isLoading });
+  // Get calendar colors from favorites
+  const favorites = getFavorites();
+  const calendarColors = new Map(
+    favorites.map(cal => [cal.id, cal.color || '#3b82f6'])
+  );
+
+  // Add color to each event
+  const eventsWithColors = events.map(event => ({
+    ...event,
+    color: calendarColors.get(event.calendarId)
+  }));
+
+  return json({ events: eventsWithColors, isLoading });
 }
 
 export default function CalendarDay() {
-  const { events, isLoading: isDataLoading } = useLoaderData<typeof loader>();
+  const { events: initialEvents, isLoading: isDataLoading } = useLoaderData<typeof loader>();
   const { currentDate, visibleCalendars } = useOutletContext<ContextType>();
   const navigation = useNavigation();
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
-  
+  const [events, setEvents] = useState(initialEvents);
+  const [favorites, setFavorites] = useState<Calendar[]>([]);
+
+  // Load favorites and their colors
+  useEffect(() => {
+    setFavorites(getFavorites());
+  }, []);
+
+  // Listen for color changes
+  useEffect(() => {
+    const handleFavoriteChange = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail.type === 'colorUpdate') {
+        const { calendarId, color } = customEvent.detail;
+        setFavorites(getFavorites()); // Update favorites
+        setEvents(prevEvents => 
+          prevEvents.map(event => 
+            event.calendarId === calendarId 
+              ? { ...event, color } 
+              : event
+          )
+        );
+      }
+    };
+
+    window.addEventListener('favoriteChanged', handleFavoriteChange);
+    return () => window.removeEventListener('favoriteChanged', handleFavoriteChange);
+  }, []);
+
+  // Update events when initialEvents changes
+  useEffect(() => {
+    // Apply current favorite colors to new events
+    const favColors = new Map(favorites.map(f => [f.id, f.color]));
+    setEvents(initialEvents.map(event => ({
+      ...event,
+      color: favColors.get(event.calendarId) || event.color
+    })));
+  }, [initialEvents, favorites]);
+
   // Update loading condition to only show when fetching new calendar data
   const isLoadingCalendar = navigation.state === "loading" && 
     navigation.location.search !== location.search && // Only when calendar ID changes
@@ -227,22 +278,28 @@ export default function CalendarDay() {
             return (
               <div
                 key={event.id}
-                className={`absolute left-1 right-1 bg-blue-100 border border-blue-200 p-2 overflow-hidden cursor-pointer
-                  ${event.continuesFromPrevDay ? 'border-t-2 border-t-blue-400' : 'rounded-t-lg'}
-                  ${event.continuesNextDay ? 'border-b-2 border-b-blue-400' : 'rounded-b-lg'}`}
+                className={`absolute left-1 right-1 p-2 overflow-hidden cursor-pointer
+                  ${event.continuesFromPrevDay ? '' : 'rounded-t-lg'}
+                  ${event.continuesNextDay ? '' : 'rounded-b-lg'}`}
                 style={{
                   top: `${topPosition}px`,
                   height: `${heightPixels}px`,
-                  minHeight: '20px'
+                  minHeight: '20px',
+                  backgroundColor: event.color ? `${event.color}20` : '#3b82f620',
+                  borderWidth: '1px',
+                  borderStyle: 'solid',
+                  borderTopWidth: event.continuesFromPrevDay ? '2px' : '1px',
+                  borderBottomWidth: event.continuesNextDay ? '2px' : '1px',
+                  borderColor: event.color || '#3b82f6'
                 }}
                 onClick={() => setSelectedEvent(event)}
               >
-                <div className="text-sm font-semibold text-blue-800 truncate">
+                <div className="text-sm font-semibold truncate" style={{ color: event.color || '#3b82f6' }}>
                   {event.title}
                   {(event.continuesFromPrevDay || event.continuesNextDay) && ' (...)'}
                 </div>
                 {heightPixels >= 8 && event.location && (
-                  <div className="text-xs text-blue-600 truncate">
+                  <div className="text-xs truncate" style={{ color: event.color || '#3b82f6' }}>
                     {event.location}
                   </div>
                 )}

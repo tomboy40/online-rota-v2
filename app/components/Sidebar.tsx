@@ -130,6 +130,14 @@ export default function Sidebar({ isOpen, onDateSelect, selectedDate, currentDat
     });
   };
 
+  const handleColorChange = (calendarId: string, color: string) => {
+    setFavorites(prev => 
+      prev.map(cal => 
+        cal.id === calendarId ? { ...cal, color } : cal
+      )
+    );
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -229,6 +237,7 @@ export default function Sidebar({ isOpen, onDateSelect, selectedDate, currentDat
                     calendar={calendar}
                     isVisible={visibleCalendars.has(calendar.id)}
                     onVisibilityChange={handleVisibilityChange}
+                    onColorChange={handleColorChange}
                   />
                 ))
               )}

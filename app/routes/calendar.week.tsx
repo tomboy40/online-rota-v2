@@ -9,6 +9,8 @@ import * as clientUtils from "~/utils/client";
 import LoadingSpinner from "~/components/LoadingSpinner";
 import CurrentTimeIndicator from "~/components/CurrentTimeIndicator";
 import EventDetailsDialog from '~/components/EventDetailsDialog';
+import { getFavorites } from "~/utils/favorites";
+import type { Calendar } from "~/utils/favorites";
 
 type ContextType = {
   currentDate: Date;
@@ -21,10 +23,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const calendarId = url.searchParams.get("calendarId");
   
-  // Only check for prefetch requests
-  const isPrefetch = request.headers.get("Purpose") === "prefetch";
-
-  if (isPrefetch) {
+  if (request.headers.get("Purpose") === "prefetch") {
     return json({ events: [], isLoading: false });
   }
 
@@ -46,14 +45,62 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
   }
 
-  return json({ events, isLoading });
+  // Get calendar colors from favorites
+  const favorites = getFavorites();
+  const calendarColors = new Map(favorites.map(cal => [cal.id, cal.color]));
+
+  // Add color to each event
+  const eventsWithColors = events.map(event => ({
+    ...event,
+    color: calendarColors.get(event.calendarId)
+  }));
+
+  return json({ events: eventsWithColors, isLoading });
 }
 
 export default function CalendarWeek() {
-  const { events, isLoading: isDataLoading } = useLoaderData<typeof loader>();
+  const { events: initialEvents, isLoading: isDataLoading } = useLoaderData<typeof loader>();
   const { currentDate, visibleCalendars } = useOutletContext<ContextType>();
   const navigation = useNavigation();
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [events, setEvents] = useState(initialEvents);
+  const [favorites, setFavorites] = useState<Calendar[]>([]);
+
+  // Load favorites and their colors
+  useEffect(() => {
+    setFavorites(getFavorites());
+  }, []);
+
+  // Listen for color changes
+  useEffect(() => {
+    const handleFavoriteChange = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail.type === 'colorUpdate') {
+        const { calendarId, color } = customEvent.detail;
+        setFavorites(getFavorites()); // Update favorites
+        setEvents(prevEvents => 
+          prevEvents.map(event => 
+            event.calendarId === calendarId 
+              ? { ...event, color } 
+              : event
+          )
+        );
+      }
+    };
+
+    window.addEventListener('favoriteChanged', handleFavoriteChange);
+    return () => window.removeEventListener('favoriteChanged', handleFavoriteChange);
+  }, []);
+
+  // Update events when initialEvents changes
+  useEffect(() => {
+    // Apply current favorite colors to new events
+    const favColors = new Map(favorites.map(f => [f.id, f.color]));
+    setEvents(initialEvents.map(event => ({
+      ...event,
+      color: favColors.get(event.calendarId) || event.color
+    })));
+  }, [initialEvents, favorites]);
 
   // Get the start and end of the week
   const weekStart = new Date(currentDate);
@@ -228,22 +275,34 @@ export default function CalendarWeek() {
                   return (
                     <div
                       key={event.id}
-                      className={`absolute left-1 right-1 bg-blue-100 border border-blue-200 p-2 overflow-hidden cursor-pointer
-                        ${startTime < dayStart ? 'border-t-2 border-t-blue-400' : 'rounded-t-lg'}
-                        ${endTime > dayEnd ? 'border-b-2 border-b-blue-400' : 'rounded-b-lg'}`}
+                      className={`absolute left-1 right-1 p-2 overflow-hidden cursor-pointer
+                        ${event.startTime < dayStart ? '' : 'rounded-t-lg'}
+                        ${event.endTime > dayEnd ? '' : 'rounded-b-lg'}`}
                       style={{
                         top: `${topPosition}px`,
                         height: `${heightPixels}px`,
-                        minHeight: '20px'
+                        minHeight: '20px',
+                        backgroundColor: event.color ? `${event.color}20` : '#3b82f620',
+                        borderWidth: '1px',
+                        borderStyle: 'solid',
+                        borderTopWidth: event.startTime < dayStart ? '2px' : '1px',
+                        borderBottomWidth: event.endTime > dayEnd ? '2px' : '1px',
+                        borderColor: event.color || '#3b82f6'
                       }}
                       onClick={() => setSelectedEvent(event)}
                     >
-                      <div className="text-sm font-semibold text-blue-800 truncate">
+                      <div 
+                        className="text-sm font-semibold truncate" 
+                        style={{ color: event.color || '#3b82f6' }}
+                      >
                         {event.title}
-                        {(startTime < dayStart || endTime > dayEnd) && ' (...)'}
+                        {(event.startTime < dayStart || event.endTime > dayEnd) && ' (...)'}
                       </div>
                       {heightPixels >= 8 && event.location && (
-                        <div className="text-xs text-blue-600 truncate">
+                        <div 
+                          className="text-xs truncate" 
+                          style={{ color: event.color || '#3b82f6' }}
+                        >
                           {event.location}
                         </div>
                       )}
