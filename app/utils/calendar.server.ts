@@ -130,11 +130,14 @@ export async function fetchCalendarEvents(
     // Get current colors from favorites before caching
     const favorites = getSafeFavorites();
     const calendarColors = new Map(favorites.map(cal => [cal.id, cal.color]));
+    const visibilityStatus = new Map(favorites.map(cal => [cal.id, cal.isVisible ?? true]));
 
-    const processedEvents = events.map(event => ({
-      ...event,
-      color: calendarColors.get(event.calendarId)
-    }));
+    const processedEvents = events
+      .filter(event => visibilityStatus.get(event.calendarId) !== false)
+      .map(event => ({
+        ...event,
+        color: calendarColors.get(event.calendarId)
+      }));
 
     // Store in cache before returning
     const cacheEntry: CacheEntry = {

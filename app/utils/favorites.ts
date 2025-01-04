@@ -4,6 +4,7 @@ export interface Calendar {
   icalLink: string;
   icalUrl?: string;
   color?: string;
+  isVisible?: boolean;
 }
 
 const STORAGE_KEY = 'calendars'; // Single storage key for all calendar data
@@ -17,7 +18,7 @@ export function getFavorites(): Calendar[] {
     const calendars = JSON.parse(data);
     if (!Array.isArray(calendars)) return [];
 
-    // Validate each calendar object
+    // Validate each calendar object and set default visibility to true
     return calendars.filter(cal => {
       return (
         cal &&
@@ -29,7 +30,10 @@ export function getFavorites(): Calendar[] {
         cal.name.trim() !== '' &&
         cal.icalLink.trim() !== ''
       );
-    });
+    }).map(cal => ({
+      ...cal,
+      isVisible: cal.isVisible ?? true // Default to true if not set
+    }));
   } catch (error) {
     console.error('Error reading calendar data:', error);
     window.localStorage.removeItem(STORAGE_KEY);
@@ -42,7 +46,10 @@ export function addFavorite(calendar: Calendar): void {
   try {
     const calendars = getFavorites();
     if (!calendars.some(cal => cal.id === calendar.id)) {
-      calendars.push(calendar);
+      calendars.push({
+        ...calendar,
+        isVisible: calendar.isVisible ?? true // Default to true if not set
+      });
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(calendars));
       window.dispatchEvent(new CustomEvent('favoriteChanged', { 
         detail: { type: 'add', calendarId: calendar.id }
@@ -114,5 +121,29 @@ export function updateCalendarColor(calendarId: string, color: string) {
     }
   } catch (error) {
     console.error('Error updating calendar color:', error);
+  }
+}
+
+export function updateCalendarVisibility(calendarId: string, isVisible: boolean) {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const calendars = getFavorites();
+    const updatedCalendars = calendars.map(cal => 
+      cal.id === calendarId ? { ...cal, isVisible } : cal
+    );
+    
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCalendars));
+    
+    window.dispatchEvent(new CustomEvent('favoriteChanged', {
+      detail: { 
+        type: 'visibilityUpdate', 
+        calendarId, 
+        isVisible,
+        timestamp: Date.now()
+      }
+    }));
+  } catch (error) {
+    console.error('Error updating calendar visibility:', error);
   }
 } 

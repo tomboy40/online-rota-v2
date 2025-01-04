@@ -8,7 +8,7 @@ import {
   ArrowPathIcon
 } from '@heroicons/react/24/outline';
 import type { Calendar } from "~/utils/favorites";
-import { removeFavorite, updateCalendarColor } from "~/utils/favorites";
+import { removeFavorite, updateCalendarColor, updateCalendarVisibility } from "~/utils/favorites";
 import EditCalendarDialog from './EditCalendarDialog';
 import LoadingSpinner from './LoadingSpinner';
 import { useState, useEffect } from "react";
@@ -36,7 +36,7 @@ interface CalendarLinkProps {
 export default function CalendarLink({ 
   calendar, 
   onRefreshCalendar,
-  isVisible = true,
+  isVisible,
   onVisibilityChange,
   onColorChange
 }: CalendarLinkProps) {
@@ -73,7 +73,14 @@ export default function CalendarLink({
   };
 
   const handleVisibilityChange = (checked: boolean) => {
-    onVisibilityChange?.(calendar.id, checked);
+    // First update the persistent storage
+    updateCalendarVisibility(calendar.id, checked);
+    
+    // Then notify parent components via callback
+    // Wrap in setTimeout to avoid state updates during render
+    setTimeout(() => {
+      onVisibilityChange?.(calendar.id, checked);
+    }, 0);
   };
 
   // Update useEffect with proper typing
@@ -96,18 +103,18 @@ export default function CalendarLink({
       <div className="group flex items-center justify-between px-6 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded-lg relative">
         <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
           <Switch
-            checked={isVisible}
+            checked={isVisible ?? calendar.isVisible ?? true}
             onChange={handleVisibilityChange}
             className={`relative inline-flex h-4 w-7 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2`}
             style={{
-              backgroundColor: isVisible ? (calendar.color || '#3b82f6') : '#e5e7eb'
+              backgroundColor: (isVisible ?? calendar.isVisible ?? true) ? (calendar.color || '#3b82f6') : '#e5e7eb'
             }}
           >
             <span className="sr-only">Show calendar</span>
             <span
               aria-hidden="true"
               className={`${
-                isVisible ? 'translate-x-3' : 'translate-x-0'
+                (isVisible ?? calendar.isVisible ?? true) ? 'translate-x-3' : 'translate-x-0'
               } pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out`}
             />
           </Switch>

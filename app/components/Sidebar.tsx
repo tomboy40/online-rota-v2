@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef, useLayoutEffect } from "react";
 import { Form } from "@remix-run/react";
-import { getFavorites, type Calendar } from "~/utils/favorites";
+import { getFavorites, type Calendar, updateCalendarVisibility } from "~/utils/favorites";
 import CalendarLink from "./CalendarLink";
 
 interface SidebarProps {
@@ -12,48 +12,97 @@ interface SidebarProps {
   onCalendarVisibilityChange?: (visibleCalendarIds: Set<string>) => void;
 }
 
+// Add proper type for the custom event
+interface FavoriteChangedEvent extends CustomEvent {
+  detail: {
+    type: 'add' | 'remove' | 'colorUpdate' | 'visibilityUpdate';
+    calendarId: string;
+    isVisible?: boolean;
+    color?: string;
+    timestamp?: number;
+  };
+}
+
 export default function Sidebar({ isOpen, onDateSelect, selectedDate, currentDate, onCreateClick, onCalendarVisibilityChange }: SidebarProps) {
   const [isQuickAccessOpen, setIsQuickAccessOpen] = useState(true);
   const [miniCalendarDate, setMiniCalendarDate] = useState(selectedDate);
   const [favorites, setFavorites] = useState<Calendar[]>([]);
   const [visibleCalendars, setVisibleCalendars] = useState<Set<string>>(new Set());
+  
+  // Move handleVisibilityStateChange outside effects to avoid dependency issues
+  const handleVisibilityStateChange = useCallback((visibleSet: Set<string>) => {
+    if (onCalendarVisibilityChange) {
+      onCalendarVisibilityChange(visibleSet);
+    }
+  }, [onCalendarVisibilityChange]);
+
+  // Initial setup effect
+  useEffect(() => {
+    const favList = getFavorites();
+    setFavorites(favList);
+    const initialVisibleCalendars = new Set(
+      favList.filter(cal => cal.isVisible !== false).map(cal => cal.id)
+    );
+    setVisibleCalendars(initialVisibleCalendars);
+    handleVisibilityStateChange(initialVisibleCalendars);
+  }, []); // Remove handleVisibilityStateChange from dependencies
+
+  // Separate effect for event listeners
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const favList = getFavorites();
+      setFavorites(favList);
+    };
+
+    const handleFavoriteChange = (event: FavoriteChangedEvent) => {
+      if (event.detail.type === 'visibilityUpdate') {
+        // Update visible calendars directly from the event
+        setVisibleCalendars(prev => {
+          const newSet = new Set(prev);
+          if (event.detail.isVisible) {
+            newSet.add(event.detail.calendarId);
+          } else {
+            newSet.delete(event.detail.calendarId);
+          }
+          return newSet;
+        });
+      } else {
+        handleStorageChange();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('favoriteChanged', handleFavoriteChange as EventListener);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('favoriteChanged', handleFavoriteChange as EventListener);
+    };
+  }, []); // No dependencies needed for event listeners
+
+  // Update parent when visible calendars change
+  useEffect(() => {
+    handleVisibilityStateChange(visibleCalendars);
+  }, [visibleCalendars, handleVisibilityStateChange]);
+
+  // Handle visibility changes
+  const handleVisibilityChange = useCallback((calendarId: string, isVisible: boolean) => {
+    updateCalendarVisibility(calendarId, isVisible);
+    setVisibleCalendars(prev => {
+      const newSet = new Set(prev);
+      if (isVisible) {
+        newSet.add(calendarId);
+      } else {
+        newSet.delete(calendarId);
+      }
+      return newSet;
+    });
+  }, []); // No dependencies needed
 
   // Update mini calendar when main calendar changes
   useEffect(() => {
     setMiniCalendarDate(selectedDate);
   }, [selectedDate]);
-
-  // Load favorites
-  useEffect(() => {
-    const loadFavorites = () => {
-      const favList = getFavorites();
-      console.log('Sidebar: Loading favorites:', favList);
-      setFavorites(favList);
-      // Initialize all calendars as visible
-      setVisibleCalendars(new Set(favList.map(cal => cal.id)));
-    };
-
-    loadFavorites();
-    
-    // Listen for storage and favoriteChanged events
-    const handleStorageChange = () => {
-      console.log('Sidebar: Storage changed');
-      loadFavorites();
-    };
-
-    const handleFavoriteChange = (event: Event) => {
-      console.log('Sidebar: Favorite changed event:', (event as CustomEvent).detail);
-      loadFavorites();
-    };
-    
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('favoriteChanged', handleFavoriteChange);
-    
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('favoriteChanged', handleFavoriteChange);
-    };
-  }, []);
 
   // Generate dates for mini calendar
   const generateCalendarDates = () => {
@@ -114,20 +163,6 @@ export default function Sidebar({ isOpen, onDateSelect, selectedDate, currentDat
 
   const formatMonthYear = () => {
     return miniCalendarDate.toLocaleString('default', { month: 'long', year: 'numeric' });
-  };
-
-  const handleVisibilityChange = (calendarId: string, isVisible: boolean) => {
-    setVisibleCalendars(prev => {
-      const newSet = new Set(prev);
-      if (isVisible) {
-        newSet.add(calendarId);
-      } else {
-        newSet.delete(calendarId);
-      }
-      // Notify parent component
-      onCalendarVisibilityChange?.(newSet);
-      return newSet;
-    });
   };
 
   const handleColorChange = (calendarId: string, color: string) => {
