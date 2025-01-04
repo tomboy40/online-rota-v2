@@ -9,13 +9,14 @@ import LoadingSpinner from "~/components/LoadingSpinner";
 import { PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
 import EditCalendarDialog from '~/components/EditCalendarDialog';
 import ConfirmDialog from '~/components/ConfirmDialog';
+import { getCachedEvents } from "~/utils/calendar.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const query = url.searchParams.get("q")?.toLowerCase() || "";
 
   if (!query) {
-    return json({ calendars: [] });
+    return json({ calendars: [], cacheInfo: {} });
   }
 
   const calendars = await db.select().from(schema.calendar).where(
@@ -25,7 +26,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
     )
   );
 
-  return json({ calendars });
+  // Get cache info for each calendar
+  const cacheInfo: Record<string, { lastRefresh?: string }> = {};
+  calendars.forEach(calendar => {
+    const cacheData = getCachedEvents(calendar.id, true);
+    if (cacheData && 'lastRefresh' in cacheData) {
+      cacheInfo[calendar.id] = { lastRefresh: cacheData.lastRefresh };
+    }
+  });
+
+  return json({ calendars, cacheInfo });
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -56,7 +66,7 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function Search() {
-  const { calendars } = useLoaderData<typeof loader>();
+  const { calendars, cacheInfo } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -68,7 +78,7 @@ export default function Search() {
   const [deleteCalendar, setDeleteCalendar] = useState<Calendar | null>(null);
   const fetcher = useFetcher();
 
-  // Check if we're loading calendar data
+  // Remove the direct cache check from isLoadingCalendar
   const isLoadingCalendar = navigation.state !== "idle" && 
     navigation.location?.search?.includes("calendarId");
 
@@ -86,7 +96,9 @@ export default function Search() {
 
   const handleCalendarClick = (calendar: Calendar, e: React.MouseEvent) => {
     e.preventDefault();
-    setIsNavigating(true);
+    // Only set navigating state if the calendar isn't cached
+    const isCached = cacheInfo[calendar.id]?.lastRefresh != null;
+    setIsNavigating(!isCached);
     const view = getCurrentView();
     navigate(`/calendar/${view}?calendarId=${calendar.id}`, {
       state: { calendarName: calendar.name }
@@ -156,9 +168,16 @@ export default function Search() {
     }
   }, [fetcher.state, fetcher.data]);
 
+  const formatLastRefresh = (dateStr: string | undefined) => {
+    if (!dateStr) return 'Never refreshed';
+    const date = new Date(dateStr);
+    return date.toLocaleString();
+  };
+
   return (
     <div className="flex flex-col h-full bg-white">
-      {(isLoadingCalendar || isNavigating || fetcher.state !== "idle") && <LoadingSpinner />}
+      {/* Only show loading spinner if we're navigating to an uncached calendar or performing a delete operation */}
+      {(isNavigating || fetcher.state !== "idle") && <LoadingSpinner />}
       {/* Search Results */}
       <div className="flex-1 overflow-auto">
         {query && displayedCalendars.length === 0 ? (
@@ -175,8 +194,13 @@ export default function Search() {
                   state={{ calendarName: calendar.name }}
                   className="flex-1 group"
                 >
-                  <h3 className="text-lg font-medium text-gray-900 group-hover:text-blue-600">{calendar.name}</h3>
+                  <h3 className="text-lg font-medium text-gray-900 group-hover:text-blue-600">
+                    {calendar.name}
+                  </h3>
                   <p className="text-sm text-gray-500 mt-1">ID: {calendar.id}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Last refreshed: {formatLastRefresh(cacheInfo[calendar.id]?.lastRefresh)}
+                  </p>
                 </Link>
                 <div className="flex items-center space-x-2">
                   <button

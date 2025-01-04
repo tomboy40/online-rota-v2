@@ -35,6 +35,7 @@ interface CacheEntry {
   timestamp: number;
   eventCount: number;
   dateRange: DateRangeSettings;
+  lastRefresh: string;
 }
 
 const calendarCache = new Map<string, CacheEntry>();
@@ -144,7 +145,8 @@ export async function fetchCalendarEvents(
       events: processedEvents,
       timestamp: Date.now(),
       eventCount: processedEvents.length,
-      dateRange
+      dateRange,
+      lastRefresh: new Date().toISOString()
     };
     calendarCache.set(cacheKey, cacheEntry);
     
@@ -205,40 +207,49 @@ export async function refreshCalendar(
   calendarId: string,
   dateRange?: DateRangeSettings
 ): Promise<CalendarEvent[]> {
-  return fetchCalendarEvents(icalUrl, calendarId, dateRange, true);
+  const events = await fetchCalendarEvents(icalUrl, calendarId, dateRange, true);
+  
+  // The lastRefresh will be set in fetchCalendarEvents when creating the cache entry
+  
+  return events;
 }
 
 // Cache info function
-export function getCalendarCacheInfo(): { calendarId: string; eventCount: number; lastUpdated: Date }[] {
+export function getCalendarCacheInfo(): { 
+  calendarId: string; 
+  eventCount: number; 
+  lastUpdated: Date;
+  lastRefresh: string;
+}[] {
   return Array.from(calendarCache.entries()).map(([key, value]) => ({
     calendarId: key.split('-')[1],
     eventCount: value.eventCount,
-    lastUpdated: new Date(value.timestamp)
+    lastUpdated: new Date(value.timestamp),
+    lastRefresh: value.lastRefresh
   }));
 }
 
-// Add a function to get cached events
-export function getCachedEvents(calendarId: string): CalendarEvent[] | undefined {
+// Update the getCachedEvents function to handle cache info
+export function getCachedEvents(calendarId: string, infoOnly?: boolean): CalendarEvent[] | { lastRefresh: string } | null {
+  // Find cache entry for this calendar
   const cacheEntry = Array.from(calendarCache.entries())
     .find(([key]) => key.includes(calendarId));
-  
-  if (cacheEntry) {
-    // Update colors from current favorites
-    const favorites = getSafeFavorites();
-    const calendarColors = new Map(favorites.map(cal => [cal.id, cal.color]));
     
-    return cacheEntry[1].events.map(event => ({
-      ...event,
-      color: calendarColors.get(event.calendarId)
-    }));
+  if (!cacheEntry) return null;
+  
+  // If infoOnly is true, return just the cache info
+  if (infoOnly) {
+    return {
+      lastRefresh: cacheEntry[1].lastRefresh
+    };
   }
   
-  return undefined;
+  // Otherwise return the events
+  return cacheEntry[1].events;
 }
 
 export async function refreshCalendarCache(calendarId: string) {
   try {
-    // Get calendar data from database using the correct query structure
     const calendarData = await db.select()
       .from(schema.calendar)
       .where(eq(schema.calendar.id, calendarId))
@@ -249,26 +260,28 @@ export async function refreshCalendarCache(calendarId: string) {
       throw new Error("Calendar not found or invalid icalLink");
     }
 
-    // Find cache entry for date range settings
     const cacheEntry = Array.from(calendarCache.entries())
       .find(([key]) => key.includes(calendarId));
 
-    // Use cache date range or default
     const dateRange = cacheEntry 
       ? cacheEntry[1].dateRange 
       : { months: 1 };
 
-    // Clear existing cache for this calendar
     clearCalendarCache(calendarData.icalLink, calendarId);
 
-    // Fetch fresh data
     const events = await refreshCalendar(
       calendarData.icalLink,
       calendarId,
       dateRange
     );
 
-    return events;
+    const cacheKey = `${calendarData.icalLink}-${calendarId}`;
+    const updatedCacheEntry = calendarCache.get(cacheKey);
+
+    return {
+      events,
+      lastRefresh: updatedCacheEntry?.lastRefresh
+    };
   } catch (error) {
     console.error('Error in refreshCalendarCache:', error);
     throw error;

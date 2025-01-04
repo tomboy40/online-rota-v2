@@ -3,7 +3,7 @@ import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData, useOutletContext, useNavigation } from "@remix-run/react";
 import { db } from "~/utils/db.server";
-import { fetchCalendarEvents, filterEventsByDateRange, type CalendarEvent } from "~/utils/calendar.server";
+import { fetchCalendarEvents, filterEventsByDateRange, type CalendarEvent, getCachedEvents } from "~/utils/calendar.server";
 import { startOfWeek, endOfWeek, startOfDay, endOfDay } from "date-fns";
 import * as clientUtils from "~/utils/client";
 import LoadingSpinner from "~/components/LoadingSpinner";
@@ -31,6 +31,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
   let isLoading = false;
 
   if (calendarId) {
+    // Check cache first
+    const cachedEvents = getCachedEvents(calendarId);
+    if (cachedEvents) {
+      return json({ events: cachedEvents, isLoading: false });
+    }
+
     isLoading = true;
     const calendar = await db.query.calendar.findFirst({
       where: (calendar, { eq }) => eq(calendar.id, calendarId)

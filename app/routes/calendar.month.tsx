@@ -4,7 +4,7 @@ import { useLoaderData, useOutletContext, useNavigation } from "@remix-run/react
 import { useCallback, useEffect, useState } from "react";
 import { db } from "~/utils/db.server";
 import { debounce } from "~/utils/helpers";
-import { fetchCalendarEvents, filterEventsByDateRange, type CalendarEvent } from "~/utils/calendar.server";
+import { fetchCalendarEvents, filterEventsByDateRange, type CalendarEvent, getCachedEvents } from "~/utils/calendar.server";
 import { startOfMonth, endOfMonth, startOfDay, endOfDay } from "date-fns";
 import * as clientUtils from "~/utils/client";
 import LoadingSpinner from "~/components/LoadingSpinner";
@@ -22,10 +22,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const calendarId = url.searchParams.get("calendarId");
   
-  // Only check for prefetch requests
-  const isPrefetch = request.headers.get("Purpose") === "prefetch";
-
-  if (isPrefetch) {
+  if (request.headers.get("Purpose") === "prefetch") {
     return json({ events: [], isLoading: false });
   }
 
@@ -33,6 +30,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
   let isLoading = false;
 
   if (calendarId) {
+    // Check cache first
+    const cachedEvents = getCachedEvents(calendarId);
+    if (cachedEvents) {
+      return json({ events: cachedEvents, isLoading: false });
+    }
+
     isLoading = true;
     const calendar = await db.query.calendar.findFirst({
       where: (calendar, { eq }) => eq(calendar.id, calendarId)

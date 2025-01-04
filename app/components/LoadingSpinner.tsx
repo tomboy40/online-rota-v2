@@ -5,7 +5,7 @@ interface LoadingSpinnerProps {
 
 export default function LoadingSpinner({ 
   fullScreen = true, 
-  message = 'Loading...' 
+  message = 'Loading calendar data...'
 }: LoadingSpinnerProps) {
   if (fullScreen) {
     return (

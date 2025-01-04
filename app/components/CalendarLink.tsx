@@ -92,7 +92,7 @@ export default function CalendarLink({
 
   useEffect(() => {
     if (isRefreshing) {
-      showLoading('Refreshing calendar data...');
+      showLoading('Loading calendar data...');
     } else {
       hideLoading();
     }

@@ -18,6 +18,11 @@ type ContextType = {
   visibleCalendars: Set<string>;
 };
 
+// Add type guard to check if the result is an array
+function isEventArray(events: ReturnType<typeof getCachedEvents>): events is CalendarEvent[] {
+  return Array.isArray(events);
+}
+
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const calendarId = url.searchParams.get("calendarId");
@@ -30,13 +35,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
   let isLoading = false;
 
   if (calendarId) {
-    isLoading = true;
-    // Try to get events from cache first
+    // Check cache first
     const cachedEvents = getCachedEvents(calendarId);
     if (cachedEvents) {
       return json({ events: cachedEvents, isLoading: false });
     }
 
+    isLoading = true;
     const calendar = await db.query.calendar.findFirst({
       where: (calendar, { eq }) => eq(calendar.id, calendarId)
     });
