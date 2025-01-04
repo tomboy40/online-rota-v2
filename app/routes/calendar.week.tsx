@@ -14,6 +14,7 @@ type ContextType = {
   currentDate: Date;
   setCurrentDate: (date: Date) => void;
   selectedCalendarId?: string;
+  visibleCalendars: Set<string>;
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -50,7 +51,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
 export default function CalendarWeek() {
   const { events, isLoading: isDataLoading } = useLoaderData<typeof loader>();
-  const { currentDate } = useOutletContext<ContextType>();
+  const { currentDate, visibleCalendars } = useOutletContext<ContextType>();
   const navigation = useNavigation();
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
@@ -129,6 +130,11 @@ export default function CalendarWeek() {
     };
   };
 
+  // In your event rendering logic, filter events based on calendar visibility
+  const filterEvents = (events: Array<any>) => {
+    return events.filter(event => visibleCalendars.has(event.calendarId));
+  };
+
   return (
     <div className="flex flex-col h-full bg-white">
       {isLoadingCalendar && <LoadingSpinner />}
@@ -193,7 +199,7 @@ export default function CalendarWeek() {
               {formatColumnHeader(date).isToday && <CurrentTimeIndicator />}
 
               {/* Events */}
-              {weekEvents
+              {filterEvents(weekEvents)
                 .filter(event => {
                   const eventDate = new Date(event.startTime);
                   return eventDate.toDateString() === date.toDateString();

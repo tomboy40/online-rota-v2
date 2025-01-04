@@ -19,7 +19,8 @@ interface HeaderProps {
   onPrevClick: () => void;
   onNextClick: () => void;
   onTodayClick: () => void;
-  onSearchClick?: () => void;
+  onSearchClick: () => void;
+  calendarName?: string;
 }
 
 export default function Header({ 

@@ -1,5 +1,5 @@
 import { Link, useLocation, useFetcher } from "@remix-run/react";
-import { Menu } from "@headlessui/react";
+import { Menu, Switch } from "@headlessui/react";
 import { 
   EllipsisVerticalIcon, 
   StarIcon, 
@@ -12,16 +12,35 @@ import { removeFavorite } from "~/utils/favorites";
 import EditCalendarDialog from './EditCalendarDialog';
 import LoadingSpinner from './LoadingSpinner';
 import { useState, useEffect } from "react";
+import { CalendarRefreshSpinner } from "~/routes/calendar.refresh-cache";
+import { useLoading } from '~/contexts/LoadingContext';
+
+// Add type for refresh cache response
+interface RefreshCacheResponse {
+  success?: boolean;
+  events?: any[];
+  error?: string;
+  details?: string;
+  message?: string;
+}
 
 interface CalendarLinkProps {
   calendar: Calendar;
   onRefreshCalendar?: () => void;
+  isVisible?: boolean;
+  onVisibilityChange?: (calendarId: string, isVisible: boolean) => void;
 }
 
-export default function CalendarLink({ calendar, onRefreshCalendar }: CalendarLinkProps) {
+export default function CalendarLink({ 
+  calendar, 
+  onRefreshCalendar,
+  isVisible = true,
+  onVisibilityChange 
+}: CalendarLinkProps) {
   const location = useLocation();
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const fetcher = useFetcher();
+  const fetcher = useFetcher<RefreshCacheResponse>();
+  const { showLoading, hideLoading } = useLoading();
   
   const isRefreshing = fetcher.state === "submitting" || 
     (fetcher.state === "loading" && fetcher.formMethod === "POST");
@@ -50,22 +69,51 @@ export default function CalendarLink({ calendar, onRefreshCalendar }: CalendarLi
     );
   };
 
-  // Add useEffect to watch fetcher state
+  const handleVisibilityChange = (checked: boolean) => {
+    onVisibilityChange?.(calendar.id, checked);
+  };
+
+  // Update useEffect with proper typing
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.success && onRefreshCalendar) {
       onRefreshCalendar();
     }
   }, [fetcher.state, fetcher.data, onRefreshCalendar]);
 
+  useEffect(() => {
+    if (isRefreshing) {
+      showLoading('Refreshing calendar data...');
+    } else {
+      hideLoading();
+    }
+  }, [isRefreshing, showLoading, hideLoading]);
+
   return (
     <>
       <div className="group flex items-center justify-between px-6 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded-lg relative">
-        {isRefreshing && <LoadingSpinner fullScreen={false} />}
+        <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
+          <Switch
+            checked={isVisible}
+            onChange={handleVisibilityChange}
+            className={`${
+              isVisible ? 'bg-blue-600' : 'bg-gray-200'
+            } relative inline-flex h-4 w-7 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2`}
+          >
+            <span className="sr-only">Show calendar</span>
+            <span
+              aria-hidden="true"
+              className={`${
+                isVisible ? 'translate-x-3' : 'translate-x-0'
+              } pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out`}
+            />
+          </Switch>
+        </div>
+
         <Link
           to={`/calendar/${getCurrentView()}?calendarId=${calendar.id}`}
           state={{ calendarName: calendar.name }}
           prefetch="intent"
-          className="flex-grow"
+          className="flex-grow ml-2"
         >
           <span>{calendar.name}</span>
         </Link>

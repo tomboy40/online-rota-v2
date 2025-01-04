@@ -14,6 +14,7 @@ type ContextType = {
   currentDate: Date;
   setCurrentDate: (date: Date) => void;
   selectedCalendarId?: string;
+  visibleCalendars: Set<string>;
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -53,7 +54,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
 export default function CalendarDay() {
   const { events, isLoading: isDataLoading } = useLoaderData<typeof loader>();
-  const { currentDate } = useOutletContext<ContextType>();
+  const { currentDate, visibleCalendars } = useOutletContext<ContextType>();
   const navigation = useNavigation();
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   
@@ -138,6 +139,10 @@ export default function CalendarDay() {
 
   const { dayName, dayNumber, isToday } = formatDayHeader();
 
+  const filterEvents = (events: Array<any>) => {
+    return events.filter(event => visibleCalendars.has(event.calendarId));
+  };
+
   return (
     <div className="flex flex-col h-full bg-white">
       {isLoadingCalendar && <LoadingSpinner />}
@@ -187,7 +192,7 @@ export default function CalendarDay() {
           {isToday && <CurrentTimeIndicator />}
 
           {/* Events */}
-          {parsedEvents.map((event) => {
+          {filterEvents(parsedEvents).map((event) => {
             const dayStart = startOfDay(currentDate);
             const dayEnd = endOfDay(currentDate);
             

@@ -16,6 +16,7 @@ import ViewSelector from "~/components/ViewSelector";
 import Header from "~/components/Header";
 import Sidebar from "~/components/Sidebar";
 import CreateCalendarDialog from "~/components/CreateCalendarDialog";
+import { LoadingProvider } from '~/contexts/LoadingContext';
 
 import styles from "~/tailwind.css";
 
@@ -44,6 +45,7 @@ export default function App() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const [visibleCalendars, setVisibleCalendars] = useState<Set<string>>(new Set());
 
   // Determine current view from URL
   const getCurrentView = (): ViewOption => {
@@ -175,6 +177,10 @@ export default function App() {
     }
   };
 
+  const handleCalendarVisibilityChange = (newVisibleCalendars: Set<string>) => {
+    setVisibleCalendars(newVisibleCalendars);
+  };
+
   return (
     <html lang="en" className="h-full">
       <head>
@@ -184,83 +190,86 @@ export default function App() {
         <Links />
       </head>
       <body className="h-full">
-        <div className="flex flex-col h-full">
-          <div className="flex items-center h-16 px-4 bg-white border-b border-gray-200">
-            {isSearchView ? (
-              <div className="flex items-center flex-1">
-                <Link
-                  to="/calendar/week"
-                  className="p-2 hover:bg-gray-100 rounded-full mr-2"
-                  aria-label="Back to calendar"
-                >
-                  <svg className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                  </svg>
-                </Link>
-                <div className="text-xl font-medium mr-8">Search</div>
-                <Form 
-                  method="get" 
-                  action="/search"
-                  onSubmit={handleSearchSubmit}
-                  className="flex-1 max-w-2xl"
-                >
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                      </svg>
+        <LoadingProvider>
+          <div className="flex flex-col h-full">
+            <div className="flex items-center h-16 px-4 bg-white border-b border-gray-200">
+              {isSearchView ? (
+                <div className="flex items-center flex-1">
+                  <Link
+                    to="/calendar/week"
+                    className="p-2 hover:bg-gray-100 rounded-full mr-2"
+                    aria-label="Back to calendar"
+                  >
+                    <svg className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                  </Link>
+                  <div className="text-xl font-medium mr-8">Search</div>
+                  <Form 
+                    method="get" 
+                    action="/search"
+                    onSubmit={handleSearchSubmit}
+                    className="flex-1 max-w-2xl"
+                  >
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                      </div>
+                      <input
+                        type="search"
+                        name="q"
+                        placeholder="Search"
+                        autoFocus
+                        className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      />
                     </div>
-                    <input
-                      type="search"
-                      name="q"
-                      placeholder="Search"
-                      autoFocus
-                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  </Form>
+                </div>
+              ) : (
+                <>
+                  <Header 
+                    currentDate={currentDate}
+                    onMenuClick={handleMenuClick}
+                    onPrevClick={handlePrevClick}
+                    onNextClick={handleNextClick}
+                    onTodayClick={handleTodayClick}
+                    onSearchClick={handleSearchClick}
+                    calendarName={location.state?.calendarName}
+                  />
+                  <div className="flex items-center space-x-4">
+                    <ViewSelector 
+                      currentView={getCurrentView()}
+                      onViewChange={handleViewChange}
                     />
                   </div>
-                </Form>
-              </div>
-            ) : (
-              <>
-                <Header 
-                  currentDate={currentDate}
-                  onMenuClick={handleMenuClick}
-                  onPrevClick={handlePrevClick}
-                  onNextClick={handleNextClick}
-                  onTodayClick={handleTodayClick}
-                  onSearchClick={handleSearchClick}
-                  calendarName={location.state?.calendarName}
-                />
-                <div className="flex items-center space-x-4">
-                  <ViewSelector 
-                    currentView={getCurrentView()}
-                    onViewChange={handleViewChange}
-                  />
-                </div>
-              </>
-            )}
+                </>
+              )}
+            </div>
+            <div className="flex flex-1 overflow-hidden">
+              <Sidebar 
+                isOpen={isSidebarOpen}
+                onDateSelect={handleDateSelect}
+                selectedDate={miniCalendarDate}
+                currentDate={currentDate}
+                onCreateClick={handleCreateClick}
+                onCalendarVisibilityChange={handleCalendarVisibilityChange}
+              />
+              <main className={`flex-1 transition-[margin] duration-300 ${isSidebarOpen ? 'ml-60' : 'ml-0'}`}>
+                <Outlet context={{ currentDate, setCurrentDate, visibleCalendars }} />
+              </main>
+            </div>
           </div>
-          <div className="flex flex-1 overflow-hidden">
-            <Sidebar 
-              isOpen={isSidebarOpen}
-              onDateSelect={handleDateSelect}
-              selectedDate={miniCalendarDate}
-              currentDate={currentDate}
-              onCreateClick={handleCreateClick}
-            />
-            <main className={`flex-1 transition-[margin] duration-300 ${isSidebarOpen ? 'ml-60' : 'ml-0'}`}>
-              <Outlet context={{ currentDate, setCurrentDate }} />
-            </main>
-          </div>
-        </div>
-        <CreateCalendarDialog
-          isOpen={isCreateDialogOpen}
-          onClose={() => setIsCreateDialogOpen(false)}
-        />
-        <div id="portal-container" />
-        <ScrollRestoration />
-        <Scripts />
-        <LiveReload />
+          <CreateCalendarDialog
+            isOpen={isCreateDialogOpen}
+            onClose={() => setIsCreateDialogOpen(false)}
+          />
+          <div id="portal-container" />
+          <ScrollRestoration />
+          <Scripts />
+          <LiveReload />
+        </LoadingProvider>
       </body>
     </html>
   );

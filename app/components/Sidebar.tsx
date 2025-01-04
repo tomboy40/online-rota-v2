@@ -9,12 +9,14 @@ interface SidebarProps {
   selectedDate: Date;
   currentDate: Date;
   onCreateClick: () => void;
+  onCalendarVisibilityChange?: (visibleCalendarIds: Set<string>) => void;
 }
 
-export default function Sidebar({ isOpen, onDateSelect, selectedDate, currentDate, onCreateClick }: SidebarProps) {
+export default function Sidebar({ isOpen, onDateSelect, selectedDate, currentDate, onCreateClick, onCalendarVisibilityChange }: SidebarProps) {
   const [isQuickAccessOpen, setIsQuickAccessOpen] = useState(true);
   const [miniCalendarDate, setMiniCalendarDate] = useState(selectedDate);
   const [favorites, setFavorites] = useState<Calendar[]>([]);
+  const [visibleCalendars, setVisibleCalendars] = useState<Set<string>>(new Set());
 
   // Update mini calendar when main calendar changes
   useEffect(() => {
@@ -27,6 +29,8 @@ export default function Sidebar({ isOpen, onDateSelect, selectedDate, currentDat
       const favList = getFavorites();
       console.log('Sidebar: Loading favorites:', favList);
       setFavorites(favList);
+      // Initialize all calendars as visible
+      setVisibleCalendars(new Set(favList.map(cal => cal.id)));
     };
 
     loadFavorites();
@@ -110,6 +114,20 @@ export default function Sidebar({ isOpen, onDateSelect, selectedDate, currentDat
 
   const formatMonthYear = () => {
     return miniCalendarDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+  };
+
+  const handleVisibilityChange = (calendarId: string, isVisible: boolean) => {
+    setVisibleCalendars(prev => {
+      const newSet = new Set(prev);
+      if (isVisible) {
+        newSet.add(calendarId);
+      } else {
+        newSet.delete(calendarId);
+      }
+      // Notify parent component
+      onCalendarVisibilityChange?.(newSet);
+      return newSet;
+    });
   };
 
   if (!isOpen) return null;
@@ -206,7 +224,12 @@ export default function Sidebar({ isOpen, onDateSelect, selectedDate, currentDat
                 <p className="text-sm text-gray-500 px-6 py-1">No favorites yet</p>
               ) : (
                 favorites.map((calendar) => (
-                  <CalendarLink key={calendar.id} calendar={calendar} />
+                  <CalendarLink 
+                    key={calendar.id} 
+                    calendar={calendar}
+                    isVisible={visibleCalendars.has(calendar.id)}
+                    onVisibilityChange={handleVisibilityChange}
+                  />
                 ))
               )}
             </div>

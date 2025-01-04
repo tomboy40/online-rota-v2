@@ -14,6 +14,7 @@ type ContextType = {
   currentDate: Date;
   setCurrentDate: (date: Date) => void;
   selectedCalendarId?: string;
+  visibleCalendars: Set<string>;
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -50,7 +51,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
 export default function CalendarMonth() {
   const { events, isLoading: isDataLoading } = useLoaderData<typeof loader>();
-  const { currentDate, setCurrentDate } = useOutletContext<ContextType>();
+  const { currentDate, setCurrentDate, visibleCalendars } = useOutletContext<ContextType>();
   const navigation = useNavigation();
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
@@ -169,6 +170,10 @@ export default function CalendarMonth() {
     return date.toDateString() === today.toDateString();
   };
 
+  const filterEvents = (events: Array<any>) => {
+    return events.filter(event => visibleCalendars.has(event.calendarId));
+  };
+
   return (
     <div id="month-grid" className="flex flex-col h-full bg-white">
       {isLoadingCalendar && <LoadingSpinner />}
@@ -200,7 +205,7 @@ export default function CalendarMonth() {
                 </div>
                 {/* Events */}
                 <div className="px-2 space-y-1">
-                  {getEventsForDate(date).map(event => (
+                  {filterEvents(getEventsForDate(date)).map(event => (
                     <div
                       key={event.id}
                       className="text-xs bg-blue-100 text-blue-700 rounded px-2 py-1 truncate hover:bg-blue-200 cursor-pointer"

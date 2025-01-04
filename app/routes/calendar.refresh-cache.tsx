@@ -1,5 +1,10 @@
 import { json, ActionFunction } from "@remix-run/node";
 import { refreshCalendarCache } from "~/utils/calendar.server";
+import LoadingSpinner from "~/components/LoadingSpinner";
+
+export function CalendarRefreshSpinner() {
+  return <LoadingSpinner fullScreen message="Refreshing calendar data..." />;
+}
 
 export const action: ActionFunction = async ({ request }) => {
   const formData = await request.formData();
