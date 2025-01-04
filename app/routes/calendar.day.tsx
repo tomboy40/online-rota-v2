@@ -27,20 +27,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const calendarId = url.searchParams.get("calendarId");
   
-  if (request.headers.get("Purpose") === "prefetch") {
-    return json({ events: [], isLoading: false });
-  }
-
   let events: CalendarEvent[] = [];
   let isLoading = false;
 
   if (calendarId) {
-    // Check cache first
-    const cachedEvents = getCachedEvents(calendarId);
-    if (cachedEvents) {
-      return json({ events: cachedEvents, isLoading: false });
-    }
-
     isLoading = true;
     const calendar = await db.query.calendar.findFirst({
       where: (calendar, { eq }) => eq(calendar.id, calendarId)
@@ -48,7 +38,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
     if (calendar) {
       try {
-        events = await fetchCalendarEvents(calendar.icalLink, calendar.id);
+        // Try to get cached events first
+        const cachedEvents = getCachedEvents(calendarId);
+        
+        if (Array.isArray(cachedEvents) && cachedEvents.length > 0) {
+          events = cachedEvents;
+        } else {
+          // If no cache or empty cache, fetch fresh data
+          events = await fetchCalendarEvents(calendar.icalLink, calendar.id, { months: 1 });
+        }
       } finally {
         isLoading = false;
       }
@@ -67,7 +65,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
     color: calendarColors.get(event.calendarId)
   }));
 
-  return json({ events: eventsWithColors, isLoading });
+  return json({ 
+    events: eventsWithColors, 
+    isLoading,
+    timestamp: Date.now() // Add timestamp to help track response freshness
+  });
 }
 
 export default function CalendarDay() {

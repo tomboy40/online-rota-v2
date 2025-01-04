@@ -58,20 +58,26 @@ export async function fetchCalendarEvents(
   dateRange: DateRangeSettings = { months: 1 },
   forceRefresh = false
 ): Promise<CalendarEvent[]> {
-  // Check cache first
   const cacheKey = `${icalUrl}-${calendarId}`;
   const cachedData = calendarCache.get(cacheKey);
+  const cacheAge = cachedData ? Date.now() - cachedData.timestamp : Infinity;
+  const CACHE_TTL = 30 * 1000; // Reduce to 30 seconds for more frequent updates
 
-  // If cache exists and date range matches, use cache
-  if (cachedData && !forceRefresh && cachedData.dateRange.months === dateRange.months) {
-    console.log(`[Calendar Cache] Hit for ${calendarId}. ${cachedData.eventCount} events from cache.`);
+  // Use cache only if it's very fresh
+  if (cachedData && !forceRefresh && cacheAge < CACHE_TTL && cachedData.events.length > 0) {
+    console.log(`[Calendar Cache] Using fresh cache for ${calendarId}`);
     return cachedData.events;
   }
 
   try {
-    console.log(`[Calendar Cache] ${forceRefresh ? 'Force refresh' : 'Cache miss'} for ${calendarId}`);
+    console.log(`[Calendar Cache] Fetching fresh data for ${calendarId}`);
     const response = await fetch(icalUrl);
     if (!response.ok) {
+      // If fetch fails and we have cached data, return it as fallback
+      if (cachedData?.events.length > 0) {
+        console.log(`[Calendar Cache] Fetch failed, using cached data for ${calendarId}`);
+        return cachedData.events;
+      }
       throw new Error(`Failed to fetch calendar data: ${response.statusText}`);
     }
 

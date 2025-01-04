@@ -51,14 +51,16 @@ export default function CalendarLink({
   // Determine current view from URL
   const getCurrentView = () => {
     const path = location.pathname;
-    if (path.includes("/calendar/day")) return "day";
-    if (path.includes("/calendar/month")) return "month";
-    if (path.includes("/calendar/week")) return "week";
-    // Get the current view from the URL if we're already on a calendar page
+    // First check if we're already on a calendar page
     if (path.includes("/calendar/")) {
-      return path.split("/calendar/")[1];
+      const view = path.split("/calendar/")[1];
+      // Return the current view if it's valid
+      if (["day", "week", "month"].includes(view)) {
+        return view;
+      }
     }
-    return "week"; // default to week view instead of day
+    // Default to week view if not on a valid calendar page
+    return "week";
   };
 
   const handleRemoveFavorite = () => {
@@ -122,9 +124,18 @@ export default function CalendarLink({
 
         <Link
           to={`/calendar/${getCurrentView()}?calendarId=${calendar.id}`}
-          state={{ calendarName: calendar.name }}
+          state={{ 
+            calendarName: calendar.name,
+            calendarId: calendar.id,
+            timestamp: Date.now() // Add timestamp to force fresh data
+          }}
+          replace={true}
           prefetch="intent"
           className="flex-grow ml-2"
+          onClick={(e) => {
+            // Clear cache before navigation to force fresh data
+            clearCalendarCache(undefined, calendar.id);
+          }}
         >
           <span>{calendar.name}</span>
         </Link>
