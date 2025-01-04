@@ -48,9 +48,9 @@ export default function App() {
   // Determine current view from URL
   const getCurrentView = (): ViewOption => {
     const path = location.pathname;
-    if (path.includes("/calendar/day")) return "Day";
-    if (path.includes("/calendar/month")) return "Month";
-    return "Week";
+    if (path.includes("/calendar/day")) return "day";
+    if (path.includes("/calendar/month")) return "month";
+    return "week";
   };
 
   const handleDateSelect = (date: Date) => {
@@ -58,11 +58,11 @@ export default function App() {
     const newMainDate = new Date(date);
     
     switch (view) {
-      case "Week":
+      case "week":
         const dayOfWeek = date.getDay();
         newMainDate.setDate(date.getDate() - dayOfWeek);
         break;
-      case "Month":
+      case "month":
         newMainDate.setDate(1);
         break;
     }
@@ -81,16 +81,16 @@ export default function App() {
     let newMiniDate = new Date(currentDate);
     
     switch (view) {
-      case "Day":
+      case "day":
         newDate.setDate(newDate.getDate() - 1);
         newMiniDate = new Date(newDate);
         break;
-      case "Week":
+      case "week":
         newDate.setDate(newDate.getDate() - 7);
         newMiniDate = new Date(newDate);
         newMiniDate.setDate(newMiniDate.getDate() + 3);
         break;
-      case "Month":
+      case "month":
         newDate.setMonth(newDate.getMonth() - 1);
         newMiniDate = new Date(newDate);
         newMiniDate.setDate(15);
@@ -106,16 +106,16 @@ export default function App() {
     let newMiniDate = new Date(currentDate);
     
     switch (view) {
-      case "Day":
+      case "day":
         newDate.setDate(newDate.getDate() + 1);
         newMiniDate = new Date(newDate);
         break;
-      case "Week":
+      case "week":
         newDate.setDate(newDate.getDate() + 7);
         newMiniDate = new Date(newDate);
         newMiniDate.setDate(newMiniDate.getDate() + 3);
         break;
-      case "Month":
+      case "month":
         newDate.setMonth(newDate.getMonth() + 1);
         newMiniDate = new Date(newDate);
         newMiniDate.setDate(15);
@@ -154,13 +154,13 @@ export default function App() {
     let path = '/calendar/';
     
     switch (view) {
-      case 'Day':
+      case 'day':
         path += 'day';
         break;
-      case 'Week':
+      case 'week':
         path += 'week';
         break;
-      case 'Month':
+      case 'month':
         path += 'month';
         break;
     }

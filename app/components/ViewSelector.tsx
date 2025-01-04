@@ -1,6 +1,4 @@
-import { Link, useLocation, useNavigate } from "@remix-run/react";
-
-export type ViewOption = "Day" | "Week" | "Month";
+export type ViewOption = "day" | "week" | "month";
 
 interface ViewSelectorProps {
   currentView: ViewOption;
@@ -8,58 +6,38 @@ interface ViewSelectorProps {
 }
 
 export default function ViewSelector({ currentView, onViewChange }: ViewSelectorProps) {
-  const location = useLocation();
-  const navigate = useNavigate();
-  
-  const handleViewChange = (view: ViewOption) => {
-    const currentSearchParams = new URLSearchParams(location.search);
-    const calendarId = currentSearchParams.get('calendarId');
-    
-    let path = '/calendar/';
-    switch (view) {
-      case 'Day':
-        path += 'day';
-        break;
-      case 'Week':
-        path += 'week';
-        break;
-      case 'Month':
-        path += 'month';
-        break;
-    }
-
-    // Preserve the calendarId when switching views
-    if (calendarId) {
-      path += `?calendarId=${calendarId}`;
-      navigate(path, {
-        state: location.state // Preserve the existing state
-      });
-    } else {
-      navigate(path);
-    }
-    onViewChange(view);
-  };
-
-  const views: ViewOption[] = ["Day", "Week", "Month"];
-
   return (
-    <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
-      {views.map((view) => {
-        const isActive = currentView === view;
-        return (
-          <button
-            key={view}
-            onClick={() => handleViewChange(view)}
-            className={`px-3 py-1.5 text-sm font-medium rounded-md ${
-              isActive
-                ? "bg-white text-gray-900 shadow"
-                : "text-gray-500 hover:text-gray-900"
-            }`}
-          >
-            {view}
-          </button>
-        );
-      })}
+    <div className="flex items-center space-x-1 bg-gray-100 p-1 rounded-lg">
+      <button
+        onClick={() => onViewChange("day")}
+        className={`px-3 py-1.5 text-sm font-medium rounded-md ${
+          currentView === "day"
+            ? "bg-white text-gray-900 shadow"
+            : "text-gray-500 hover:text-gray-900"
+        }`}
+      >
+        Day
+      </button>
+      <button
+        onClick={() => onViewChange("week")}
+        className={`px-3 py-1.5 text-sm font-medium rounded-md ${
+          currentView === "week"
+            ? "bg-white text-gray-900 shadow"
+            : "text-gray-500 hover:text-gray-900"
+        }`}
+      >
+        Week
+      </button>
+      <button
+        onClick={() => onViewChange("month")}
+        className={`px-3 py-1.5 text-sm font-medium rounded-md ${
+          currentView === "month"
+            ? "bg-white text-gray-900 shadow"
+            : "text-gray-500 hover:text-gray-900"
+        }`}
+      >
+        Month
+      </button>
     </div>
   );
 } 

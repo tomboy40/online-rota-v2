@@ -1,4 +1,6 @@
 import ICAL from 'ical.js';
+import { db, schema } from '~/utils/db.server';
+import { eq } from 'drizzle-orm';
 
 export interface DateRangeSettings {
   months: number; // number of months before and after current date
@@ -184,4 +186,43 @@ export function getCachedEvents(calendarId: string): CalendarEvent[] | undefined
     .find(([key]) => key.includes(calendarId));
   
   return cacheEntry?.[1].events;
+}
+
+export async function refreshCalendarCache(calendarId: string) {
+  try {
+    // Get calendar data from database using the correct query structure
+    const calendarData = await db.select()
+      .from(schema.calendar)
+      .where(eq(schema.calendar.id, calendarId))
+      .limit(1)
+      .then(rows => rows[0]);
+
+    if (!calendarData || !calendarData.icalLink) {
+      throw new Error("Calendar not found or invalid icalLink");
+    }
+
+    // Find cache entry for date range settings
+    const cacheEntry = Array.from(calendarCache.entries())
+      .find(([key]) => key.includes(calendarId));
+
+    // Use cache date range or default
+    const dateRange = cacheEntry 
+      ? cacheEntry[1].dateRange 
+      : { months: 1 };
+
+    // Clear existing cache for this calendar
+    clearCalendarCache(calendarData.icalLink, calendarId);
+
+    // Fetch fresh data
+    const events = await refreshCalendar(
+      calendarData.icalLink,
+      calendarId,
+      dateRange
+    );
+
+    return events;
+  } catch (error) {
+    console.error('Error in refreshCalendarCache:', error);
+    throw error;
+  }
 } 
