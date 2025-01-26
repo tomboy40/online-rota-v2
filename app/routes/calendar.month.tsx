@@ -4,12 +4,18 @@ import { useLoaderData, useOutletContext, useNavigation } from "@remix-run/react
 import { useCallback, useEffect, useState } from "react";
 import { db } from "~/utils/db.server";
 import { debounce } from "~/utils/helpers";
-import { fetchCalendarEvents, filterEventsByDateRange, type CalendarEvent, getCachedEvents } from "~/utils/calendar.server";
+import { fetchCalendarEvents, filterEventsByDateRange, type CalendarEvent as BaseCalendarEvent, getCachedEvents } from "~/utils/calendar.server";
 import { startOfMonth, endOfMonth, startOfDay, endOfDay } from "date-fns";
 import * as clientUtils from "~/utils/client";
 import LoadingSpinner from "~/components/LoadingSpinner";
 import EventDetailsDialog from "~/components/EventDetailsDialog";
-import { getFavorites } from "~/utils/favorites";
+import { getFavorites, type Calendar } from "~/utils/favorites";
+import { useLoading } from '~/contexts/LoadingContext';
+
+// Extend the base calendar event type
+type CalendarEvent = BaseCalendarEvent & {
+  isFullDay?: boolean;
+};
 
 type ContextType = {
   currentDate: Date;
@@ -22,20 +28,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const calendarId = url.searchParams.get("calendarId");
   
-  if (request.headers.get("Purpose") === "prefetch") {
-    return json({ events: [], isLoading: false });
-  }
-
   let events: CalendarEvent[] = [];
   let isLoading = false;
 
   if (calendarId) {
-    // Check cache first
-    const cachedEvents = getCachedEvents(calendarId);
-    if (cachedEvents) {
-      return json({ events: cachedEvents, isLoading: false });
-    }
-
     isLoading = true;
     const calendar = await db.query.calendar.findFirst({
       where: (calendar, { eq }) => eq(calendar.id, calendarId)
@@ -43,7 +39,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
     if (calendar) {
       try {
-        events = await fetchCalendarEvents(calendar.icalLink, calendar.id);
+        // Try to get cached events first
+        const cachedEvents = getCachedEvents(calendarId);
+        
+        if (Array.isArray(cachedEvents) && cachedEvents.length > 0) {
+          events = cachedEvents;
+        } else {
+          // If no cache or empty cache, fetch fresh data
+          events = await fetchCalendarEvents(calendar.icalLink, calendar.id, { months: 1 });
+        }
       } finally {
         isLoading = false;
       }
@@ -62,7 +66,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
     color: calendarColors.get(event.calendarId)
   }));
 
-  return json({ events: eventsWithColors, isLoading });
+  return json({ 
+    events: eventsWithColors, 
+    isLoading,
+    timestamp: Date.now()
+  });
 }
 
 export default function CalendarMonth() {
@@ -71,12 +79,67 @@ export default function CalendarMonth() {
   const navigation = useNavigation();
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [events, setEvents] = useState(initialEvents);
+  const [processedEvents, setProcessedEvents] = useState<CalendarEvent[]>([]);
   const [favorites, setFavorites] = useState<Calendar[]>([]);
+  const { showLoading, hideLoading } = useLoading();
 
   // Load favorites and their colors
   useEffect(() => {
     setFavorites(getFavorites());
   }, []);
+
+  // Process and deduplicate events when they change
+  useEffect(() => {
+    const monthStart = startOfMonth(currentDate);
+    const monthEnd = endOfMonth(currentDate);
+    const processedMap = new Map<string, CalendarEvent>();
+
+    events.forEach(event => {
+      try {
+        const startTime = new Date(event.startTime);
+        const endTime = new Date(event.endTime);
+
+        if (!isNaN(startTime.getTime()) && !isNaN(endTime.getTime())) {
+          // Check if it's a full-day event by checking if the time component is midnight
+          const isFullDay = startTime.getHours() === 0 && 
+                          startTime.getMinutes() === 0 && 
+                          endTime.getHours() === 0 && 
+                          endTime.getMinutes() === 0;
+
+          // For full-day events:
+          // - Start time should be start of the start day
+          // - End time should be start of the end day (exclusive) - 1 millisecond
+          const eventStart = isFullDay ? startOfDay(startTime) : startTime;
+          const eventEnd = isFullDay 
+            ? new Date(startOfDay(endTime).getTime() - 1) // End at 23:59:59.999 of previous day
+            : endTime;
+
+          // Create a unique ID that properly handles full-day events
+          const uniqueId = isFullDay
+            ? `${event.id}_${eventStart.toISOString().split('T')[0]}_fullday`
+            : event.recurrenceId 
+              ? `${event.id}_${event.recurrenceId}`
+              : `${event.id}_${startTime.toISOString()}`;
+
+          // Only process if within month bounds
+          if (!processedMap.has(uniqueId) && 
+              !(eventEnd < monthStart || eventStart > monthEnd)) {
+            processedMap.set(uniqueId, {
+              ...event,
+              id: uniqueId,
+              startTime: eventStart,
+              endTime: eventEnd,
+              isFullDay
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error processing event:', error, event);
+      }
+    });
+
+    setProcessedEvents(Array.from(processedMap.values()));
+  }, [events, currentDate]);
 
   // Listen for color changes
   useEffect(() => {
@@ -84,7 +147,7 @@ export default function CalendarMonth() {
       const customEvent = event as CustomEvent;
       if (customEvent.detail.type === 'colorUpdate') {
         const { calendarId, color } = customEvent.detail;
-        setFavorites(getFavorites()); // Update favorites
+        setFavorites(getFavorites());
         setEvents(prevEvents => 
           prevEvents.map(event => 
             event.calendarId === calendarId 
@@ -101,7 +164,6 @@ export default function CalendarMonth() {
 
   // Update events when initialEvents changes
   useEffect(() => {
-    // Apply current favorite colors to new events
     const favColors = new Map(favorites.map(f => [f.id, f.color]));
     setEvents(initialEvents.map(event => ({
       ...event,
@@ -109,34 +171,30 @@ export default function CalendarMonth() {
     })));
   }, [initialEvents, favorites]);
 
-  // Get the start and end of the month
-  const monthStart = startOfMonth(currentDate);
-  const monthEnd = endOfMonth(currentDate);
-
   // Filter events for each day
   const getEventsForDate = (date: Date) => {
-    return events
+    const dayStart = startOfDay(date);
+    const dayEnd = endOfDay(date);
+
+    return processedEvents
       .map(event => {
         try {
-          const startTime = new Date(event.startTime);
-          const endTime = new Date(event.endTime);
-
-          if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
-            return null;
-          }
-
-          const dayStart = startOfDay(date);
-          const dayEnd = endOfDay(date);
+          const startTime = event.startTime;
+          const endTime = event.endTime;
 
           // Check if event overlaps with the day
           if (endTime < dayStart || startTime > dayEnd) {
             return null;
           }
 
+          // For full-day events, use the day boundaries
+          const adjustedStart = event.isFullDay ? dayStart : startTime;
+          const adjustedEnd = event.isFullDay ? dayEnd : endTime;
+
           return {
             ...event,
-            startTime,
-            endTime,
+            startTime: adjustedStart,
+            endTime: adjustedEnd,
             continuesFromPrevDay: startTime < dayStart,
             continuesNextDay: endTime > dayEnd
           };
@@ -148,10 +206,20 @@ export default function CalendarMonth() {
       .filter((event): event is NonNullable<typeof event> => event !== null);
   };
 
-  // Update loading condition to only show when fetching new calendar data
-  const isLoadingCalendar = navigation.state === "loading" && 
-    navigation.location.search !== location.search &&
-    navigation.location.search.includes("calendarId");
+  // Update loading effect
+  useEffect(() => {
+    const isLoadingCalendar = 
+      isDataLoading || 
+      (navigation.state === "loading" && 
+       navigation.location?.search !== location.search && 
+       navigation.location?.search.includes("calendarId"));
+
+    if (isLoadingCalendar) {
+      showLoading('Loading calendar data...');
+    } else {
+      hideLoading();
+    }
+  }, [isDataLoading, navigation.state, navigation.location?.search, showLoading, hideLoading]);
 
   // Store current view
   useEffect(() => {
@@ -230,7 +298,6 @@ export default function CalendarMonth() {
 
   return (
     <div id="month-grid" className="flex flex-col h-full bg-white">
-      {isLoadingCalendar && <LoadingSpinner />}
       {/* Month Grid */}
       <div className="grid grid-cols-7 flex-1 border-t border-l">
         {/* Day headers */}

@@ -10,6 +10,7 @@ import * as clientUtils from "~/utils/client";
 import LoadingSpinner from "~/components/LoadingSpinner";
 import EventDetailsDialog from '~/components/EventDetailsDialog';
 import { getFavorites } from "~/utils/favorites";
+import { useLoading } from '~/contexts/LoadingContext';
 
 type ContextType = {
   currentDate: Date;
@@ -29,22 +30,23 @@ export async function loader({ request }: LoaderFunctionArgs) {
   
   let events: CalendarEvent[] = [];
   let isLoading = false;
+  let isCached = false;
 
   if (calendarId) {
-    isLoading = true;
-    const calendar = await db.query.calendar.findFirst({
-      where: (calendar, { eq }) => eq(calendar.id, calendarId)
-    });
+    // Check cache first
+    const cacheInfo = getCachedEvents(calendarId, true);
+    isCached = Boolean(cacheInfo && 'lastRefresh' in cacheInfo);
 
-    if (calendar) {
+    if (isCached) {
+      events = getCachedEvents(calendarId) as CalendarEvent[];
+    } else {
+      isLoading = true;
       try {
-        // Try to get cached events first
-        const cachedEvents = getCachedEvents(calendarId);
-        
-        if (Array.isArray(cachedEvents) && cachedEvents.length > 0) {
-          events = cachedEvents;
-        } else {
-          // If no cache or empty cache, fetch fresh data
+        const calendar = await db.query.calendar.findFirst({
+          where: (calendar, { eq }) => eq(calendar.id, calendarId)
+        });
+
+        if (calendar) {
           events = await fetchCalendarEvents(calendar.icalLink, calendar.id, { months: 1 });
         }
       } finally {
@@ -68,17 +70,19 @@ export async function loader({ request }: LoaderFunctionArgs) {
   return json({ 
     events: eventsWithColors, 
     isLoading,
-    timestamp: Date.now() // Add timestamp to help track response freshness
+    isCached,
+    timestamp: Date.now()
   });
 }
 
 export default function CalendarDay() {
-  const { events: initialEvents, isLoading: isDataLoading } = useLoaderData<typeof loader>();
+  const { events: initialEvents, isLoading: isDataLoading, isCached } = useLoaderData<typeof loader>();
   const { currentDate, visibleCalendars } = useOutletContext<ContextType>();
   const navigation = useNavigation();
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [events, setEvents] = useState(initialEvents);
   const [favorites, setFavorites] = useState<Calendar[]>([]);
+  const { showLoading, hideLoading } = useLoading();
 
   // Load favorites and their colors
   useEffect(() => {
@@ -116,10 +120,20 @@ export default function CalendarDay() {
     })));
   }, [initialEvents, favorites]);
 
-  // Update loading condition to only show when fetching new calendar data
-  const isLoadingCalendar = navigation.state === "loading" && 
-    navigation.location.search !== location.search && // Only when calendar ID changes
-    navigation.location.search.includes("calendarId");
+  // Update loading effect
+  useEffect(() => {
+    const isLoadingCalendar = 
+      (isDataLoading && !isCached) || 
+      (navigation.state === "loading" && 
+       navigation.location?.search !== location.search && 
+       navigation.location?.search.includes("calendarId"));
+
+    if (isLoadingCalendar) {
+      showLoading('Loading calendar data...');
+    } else {
+      hideLoading();
+    }
+  }, [isDataLoading, isCached, navigation.state, navigation.location?.search, location.search, showLoading, hideLoading]);
 
   // Store current view
   useEffect(() => {
@@ -203,7 +217,6 @@ export default function CalendarDay() {
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {isLoadingCalendar && <LoadingSpinner />}
       {/* Header row with day */}
       <div className="flex border-b border-gray-200 bg-white sticky top-0 z-10">
         {/* Time gutter */}

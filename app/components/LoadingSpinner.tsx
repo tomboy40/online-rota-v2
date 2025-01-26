@@ -1,12 +1,16 @@
 interface LoadingSpinnerProps {
   fullScreen?: boolean;
   message?: string;
+  isLoading?: boolean;
 }
 
 export default function LoadingSpinner({ 
   fullScreen = true, 
-  message = 'Loading calendar data...'
+  message = 'Loading calendar data...',
+  isLoading = true
 }: LoadingSpinnerProps) {
+  if (!isLoading) return null;
+
   if (fullScreen) {
     return (
       <div 
@@ -22,7 +26,7 @@ export default function LoadingSpinner({
   }
 
   return (
-    <div className="flex items-center justify-center">
+    <div className="flex items-center justify-center p-4">
       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
     </div>
   );

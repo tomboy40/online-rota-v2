@@ -1,4 +1,4 @@
-import { Link, useLocation, useFetcher } from "@remix-run/react";
+import { Link, useLocation, useFetcher, useNavigate } from "@remix-run/react";
 import { Menu, Switch } from "@headlessui/react";
 import { 
   EllipsisVerticalIcon, 
@@ -15,6 +15,7 @@ import { useState, useEffect } from "react";
 import { CalendarRefreshSpinner } from "~/routes/calendar.refresh-cache";
 import { useLoading } from '~/contexts/LoadingContext';
 import { ColorPicker } from './ColorPicker';
+import { getCachedEvents } from "~/utils/calendar.server";
 
 // Add type for refresh cache response
 interface RefreshCacheResponse {
@@ -44,6 +45,7 @@ export default function CalendarLink({
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const fetcher = useFetcher<RefreshCacheResponse>();
   const { showLoading, hideLoading } = useLoading();
+  const navigate = useNavigate();
   
   const isRefreshing = fetcher.state === "submitting" || 
     (fetcher.state === "loading" && fetcher.formMethod === "POST");
@@ -93,12 +95,26 @@ export default function CalendarLink({
   }, [fetcher.state, fetcher.data, onRefreshCalendar]);
 
   useEffect(() => {
-    if (isRefreshing) {
+    // Only show loading during actual refresh operations
+    if (fetcher.state === "submitting" && fetcher.formData?.get("calendarId")) {
       showLoading('Loading calendar data...');
     } else {
       hideLoading();
     }
-  }, [isRefreshing, showLoading, hideLoading]);
+  }, [fetcher.state, fetcher.formData, showLoading, hideLoading]);
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    
+    // Navigate to calendar view
+    navigate(`/calendar/${getCurrentView()}?calendarId=${calendar.id}`, {
+      state: { 
+        calendarName: calendar.name,
+        calendarId: calendar.id,
+        timestamp: Date.now()
+      }
+    });
+  };
 
   return (
     <>
@@ -122,23 +138,12 @@ export default function CalendarLink({
           </Switch>
         </div>
 
-        <Link
-          to={`/calendar/${getCurrentView()}?calendarId=${calendar.id}`}
-          state={{ 
-            calendarName: calendar.name,
-            calendarId: calendar.id,
-            timestamp: Date.now() // Add timestamp to force fresh data
-          }}
-          replace={true}
-          prefetch="intent"
-          className="flex-grow ml-2"
-          onClick={(e) => {
-            // Clear cache before navigation to force fresh data
-            clearCalendarCache(undefined, calendar.id);
-          }}
+        <button
+          className="flex-grow ml-2 text-left"
+          onClick={handleClick}
         >
           <span>{calendar.name}</span>
-        </Link>
+        </button>
 
         <Menu as="div" className="relative">
           <Menu.Button className="flex items-center justify-center h-8 w-8 rounded-full text-gray-400 hover:text-gray-600">

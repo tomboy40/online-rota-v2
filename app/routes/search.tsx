@@ -96,12 +96,15 @@ export default function Search() {
 
   const handleCalendarClick = (calendar: Calendar, e: React.MouseEvent) => {
     e.preventDefault();
-    // Only set navigating state if the calendar isn't cached
     const isCached = cacheInfo[calendar.id]?.lastRefresh != null;
     setIsNavigating(!isCached);
-    const view = getCurrentView();
-    navigate(`/calendar/${view}?calendarId=${calendar.id}`, {
-      state: { calendarName: calendar.name }
+    
+    navigate(`/calendar/${getCurrentView()}?calendarId=${calendar.id}`, {
+      state: { 
+        calendarName: calendar.name,
+        calendarId: calendar.id,
+        timestamp: Date.now()
+      }
     });
   };
 
@@ -176,8 +179,8 @@ export default function Search() {
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {/* Only show loading spinner if we're navigating to an uncached calendar or performing a delete operation */}
-      {(isNavigating || fetcher.state !== "idle") && <LoadingSpinner />}
+      {/* Only show loading when navigating to uncached calendar */}
+      {isNavigating && <LoadingSpinner fullScreen message="Loading calendar data..." />}
       {/* Search Results */}
       <div className="flex-1 overflow-auto">
         {query && displayedCalendars.length === 0 ? (
